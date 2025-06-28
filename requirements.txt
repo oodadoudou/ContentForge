@@ -1,0 +1,14 @@
+httpx
+beautifulsoup4
+pycryptodome
+Pillow
+natsort
+opencc-python-reimplemented
+zhconv
+pandas
+EbookLib
+lxml
+tqdm
+requests
+pypinyin
+markdown2

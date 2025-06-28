@@ -1,0 +1,129 @@
+@namespace epub "http://www.idpf.org/2007/ops";
+
+@font-face {
+    font-family: "ReaderFont";
+    src: url(res:///system/fonts/DroidSansFallback.ttf); /* 兼容旧设备 */
+}
+
+body {
+    font-family: -apple-system, "system-ui", "BlinkMacSystemFont", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", "sans-serif", "ReaderFont";
+    line-height: 1.7; /* 舒适的行高 */
+    margin: 3% 5%;    /* 页面边距 */
+    text-align: justify; /* 两端对齐 */
+    widows: 2;
+    orphans: 2;
+}
+
+
+/* --- 段落与文本 --- */
+p {
+    font-size: 1em; /* 基准字体大小 */
+    margin-top: 0;
+    margin-bottom: 1.2em; /* 段后距 */
+    text-indent: 0;     /* 首行缩进 */
+}
+
+p.no-indent {
+    text-indent: 0;
+}
+
+
+/* --- 标题层级 --- */
+h1, .titlel1std {
+    font-size: 1.3em;
+    font-weight: bold;
+    margin-top: 3em;
+    margin-bottom: 1.5em;
+    line-height: 1.3;
+    text-indent: 0;
+    page-break-before: always; /* 每个大章都另起一页 */
+    border-bottom: 1px solid #cccccc; /* 添加一条底部分隔线 */
+    padding-bottom: 0.3em;
+}
+
+h2, .titlel2std {
+    font-size: 1.25em;
+    font-weight: bold;
+    margin-top: 2.5em;
+    margin-bottom: 1.2em;
+    line-height: 1.4;
+    text-indent: 0;
+    border-bottom: 0.75px solid #cccccc; /* 添加一条底部分隔线 */
+    padding-bottom: 0.3em;
+}
+
+h3, .titlel3std {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-top: 2em;
+    margin-bottom: 1em;
+    line-height: 1.5;
+    text-indent: 0;
+}
+
+h4, h5, h6 {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-top: 2em;
+    margin-bottom: 0.8em;
+    line-height: 1.6;
+    text-indent: 0;
+}
+
+
+/* --- 图像 --- */
+div.centeredimage, .image-container {
+    display: block;
+    text-align: center;
+    margin: 2em 0; /* 图片的垂直边距 */
+    text-indent: 0;
+    page-break-inside: avoid; /* 避免图片被分页符截断 */
+}
+
+img, img.attpic {
+    max-width: 95%; /* 图片最大宽度不超过屏幕的95% */
+    height: auto;
+    display: inline-block;
+    border: 1px solid #dddddd; /* 给图片一个浅色边框 */
+    padding: 4px;
+    box-sizing: border-box;
+}
+
+
+/* --- 其他 --- */
+.booktitle {
+    font-size: 2.5em;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 30%;
+}
+
+.bookauthor {
+    font-size: 1.5em;
+    text-align: center;
+    margin-top: 1em;
+    page-break-after: always;
+}
+
+/* --- 【核心修正】: 针对目录页 (nav.xhtml) 的样式 --- */
+nav[epub|type="toc"] ol {
+    padding: 0;
+    margin: 0 0 0 2em;
+    list-style-type: none; /* 移除列表前的默认数字序号 */
+}
+nav[epub|type="toc"] li {
+    margin: 0;
+    padding: 0;
+}
+nav[epub|type="toc"] ol ol {
+    margin-left: 2em; /* 为二级目录创建缩进 */
+}
+nav[epub|type="toc"] a {
+    text-decoration: none; /* 默认无下划线 */
+    color: #333333;       /* 深灰色字体 */
+    font-size: 1.1em;
+    line-height: 1.8;
+}
+nav[epub|type="toc"] a:hover {
+    text-decoration: underline; /* 鼠标悬停时显示下划线 */
+}
