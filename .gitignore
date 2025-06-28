@@ -1,0 +1,29 @@
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 虚拟环境
+venv/
+env/
+.venv/
+
+# 操作系统特定文件
+.DS_Store
+Thumbs.db
+
+# IDE/编辑器配置
+.idea/
+.vscode/
+
+# 敏感配置文件 (!!!)
+shared_assets/settings.json
+01_acquisition/bomtoontw.json
+_temp_runner.py
+
+# 输出文件夹
+**/merged_pdfs/
+**/merged_long_img/
+**/split_by_solid_band/
+**/merged_output/
