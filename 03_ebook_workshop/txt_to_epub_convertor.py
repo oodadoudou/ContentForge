@@ -3,140 +3,6 @@ import re
 import sys
 from ebooklib import epub
 
-# --- 默认的 CSS 样式 ---
-DEFAULT_CSS = """
-/* --- 全局与页面设置 --- */
-@namespace epub "http://www.idpf.org/2007/ops";
-
-@font-face {
-    font-family: "ReaderFont";
-    src: url(res:///system/fonts/DroidSansFallback.ttf); /* 兼容旧设备 */
-}
-
-body {
-    font-family: -apple-system, "system-ui", "BlinkMacSystemFont", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", "sans-serif", "ReaderFont";
-    line-height: 1.7; /* 舒适的行高 */
-    margin: 3% 5%;    /* 页面边距 */
-    text-align: justify; /* 两端对齐 */
-    widows: 2;
-    orphans: 2;
-}
-
-
-/* --- 段落与文本 --- */
-p {
-    font-size: 1em; /* 基准字体大小 */
-    margin-top: 0;
-    margin-bottom: 1.2em; /* 段后距 */
-    text-indent: 0;     /* 首行缩进 */
-}
-
-p.no-indent {
-    text-indent: 0;
-}
-
-
-/* --- 标题层级 --- */
-h1, .titlel1std {
-    font-size: 1.3em;
-    font-weight: bold;
-    margin-top: 3em;
-    margin-bottom: 1.5em;
-    line-height: 1.3;
-    text-indent: 0;
-    page-break-before: always; /* 每个大章都另起一页 */
-    border-bottom: 1px solid #cccccc; /* 添加一条底部分隔线 */
-    padding-bottom: 0.3em;
-}
-
-h2, .titlel2std {
-    font-size: 1.25em;
-    font-weight: bold;
-    margin-top: 2.5em;
-    margin-bottom: 1.2em;
-    line-height: 1.4;
-    text-indent: 0;
-    border-bottom: 0.75px solid #cccccc; /* 添加一条底部分隔线 */
-    padding-bottom: 0.3em;
-}
-
-h3, .titlel3std {
-    font-size: 1.2em;
-    font-weight: bold;
-    margin-top: 2em;
-    margin-bottom: 1em;
-    line-height: 1.5;
-    text-indent: 0;
-}
-
-h4, h5, h6 {
-    font-size: 1.1em;
-    font-weight: bold;
-    margin-top: 2em;
-    margin-bottom: 0.8em;
-    line-height: 1.6;
-    text-indent: 0;
-}
-
-
-/* --- 图像 --- */
-div.centeredimage, .image-container {
-    display: block;
-    text-align: center;
-    margin: 2em 0; /* 图片的垂直边距 */
-    text-indent: 0;
-    page-break-inside: avoid; /* 避免图片被分页符截断 */
-}
-
-img, img.attpic {
-    max-width: 95%; /* 图片最大宽度不超过屏幕的95% */
-    height: auto;
-    display: inline-block;
-    border: 1px solid #dddddd; /* 给图片一个浅色边框 */
-    padding: 4px;
-    box-sizing: border-box;
-}
-
-
-/* --- 其他 --- */
-.booktitle {
-    font-size: 2.5em;
-    font-weight: bold;
-    text-align: center;
-    margin-top: 30%;
-}
-
-.bookauthor {
-    font-size: 1.5em;
-    text-align: center;
-    margin-top: 1em;
-    page-break-after: always;
-}
-
-/* --- 【核心修正】: 针对目录页 (nav.xhtml) 的样式 --- */
-nav[epub|type="toc"] ol {
-    padding: 0;
-    margin: 0 0 0 2em;
-    list-style-type: none; /* 移除列表前的默认数字序号 */
-}
-nav[epub|type="toc"] li {
-    margin: 0;
-    padding: 0;
-}
-nav[epub|type="toc"] ol ol {
-    margin-left: 2em; /* 为二级目录创建缩进 */
-}
-nav[epub|type="toc"] a {
-    text-decoration: none; /* 默认无下划线 */
-    color: #333333;       /* 深灰色字体 */
-    font-size: 1.1em;
-    line-height: 1.8;
-}
-nav[epub|type="toc"] a:hover {
-    text-decoration: underline; /* 鼠标悬停时显示下划线 */
-}
-"""
-
 def print_progress_bar(iteration, total, prefix='进度', suffix='完成', length=50, fill='█'):
     """
     打印进度条的辅助函数。
@@ -168,14 +34,15 @@ def get_user_input_path():
 def scan_directory(work_dir):
     """
     扫描目录，查找 TXT, 封面图片和 CSS 文件。
+    【修复】现在会从项目根目录正确查找 shared_assets 文件夹。
     """
     txt_files = []
     cover_image_path = None
-    css_content = DEFAULT_CSS
-    css_file_found = False
-
-    image_extensions = ['.jpg', '.jpeg', '.png']
+    css_content = None
     
+    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff']
+    
+    print("\n--- 正在扫描工作目录 ---")
     for filename in sorted(os.listdir(work_dir)):
         full_path = os.path.join(work_dir, filename)
         if not os.path.isfile(full_path):
@@ -188,17 +55,48 @@ def scan_directory(work_dir):
             cover_image_path = full_path
             print(f"  [发现封面] 将使用 '{filename}' 作为封面。")
 
-        if filename.lower().endswith('.css'):
+        if css_content is None and filename.lower().endswith('.css'):
             try:
                 with open(full_path, 'r', encoding='utf-8') as f:
                     css_content = f.read()
-                css_file_found = True
-                print(f"  [发现CSS] 将使用自定义样式文件 '{filename}'。")
+                print(f"  [加载样式] 成功加载用户目录中的样式文件: '{filename}'。")
             except Exception as e:
-                print(f"  [警告] 读取CSS文件 '{filename}' 失败: {e}。将使用默认样式。")
+                print(f"  [警告] 读取CSS文件 '{filename}' 失败: {e}。将尝试加载默认样式。")
+    
+    if css_content is None:
+        print("  [提示] 未在工作目录中找到CSS文件，正在尝试加载内置的默认样式...")
+        try:
+            # --- 【核心修复】 ---
+            # 1. 获取脚本所在的目录 (e.g., .../03_ebook_workshop)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            # 2. 获取上一级目录，即项目根目录
+            project_root = os.path.dirname(script_dir)
+            
+            default_css_filename = "new_style.css"
+            
+            # 3. 从项目根目录构建'shared_assets'的路径
+            default_css_path = os.path.join(project_root, 'shared_assets', default_css_filename)
+            
+            # 为了兼容您之前的提问，也检查'shared_asserts'
+            if not os.path.exists(default_css_path):
+                 fallback_path = os.path.join(project_root, 'shared_asserts', default_css_filename)
+                 if os.path.exists(fallback_path):
+                     default_css_path = fallback_path
+            # --- 【修复结束】 ---
 
-    if not css_file_found:
-        print("  [提示] 未在目录中找到CSS文件，将使用内置的默认样式。")
+            with open(default_css_path, 'r', encoding='utf-8') as f:
+                css_content = f.read()
+            print(f"  [加载样式] 成功加载默认样式: {default_css_path}")
+        except FileNotFoundError:
+            print(f"\n[致命错误] 默认样式文件未找到！")
+            # 更新了错误提示，使其更准确
+            print(f"  请确保项目根目录下存在 'shared_assets/{default_css_filename}' 文件。")
+            # 打印脚本尝试查找的路径以帮助调试
+            print(f"  脚本尝试查找的路径为: {default_css_path}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"\n[致命错误] 读取默认样式文件时出错: {e}")
+            sys.exit(1)
         
     if not txt_files:
         print("\n[错误] 在指定目录中未找到任何 .txt 文件。")
@@ -256,7 +154,6 @@ def print_toc_for_confirmation(toc):
     if not toc:
         print("(未识别到任何目录)")
     for title, level in toc:
-        # 【核心修正】: 恢复显示原始标题，包括序号
         if level == 1:
             print(f"- {title}")
         else:
@@ -297,7 +194,6 @@ def confirm_and_edit_toc(current_txt_file, l1_regex, l2_regex):
         new_toc = []
         for line in lines:
             if line.strip().startswith('- '):
-                # We assume the user has provided the clean title now
                 title = line.strip()[2:].strip()
                 if line.startswith('    '):
                     new_toc.append((title, 2))
@@ -393,7 +289,6 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
             html_content = text_to_html(raw_content)
             
             filename = f'chap_{i}.xhtml'
-            # 【核心修正】: 恢复使用原始标题
             chapter_item = epub.EpubHtml(title=original_title, file_name=filename, lang='zh')
             
             chapter_item.content = f'<h{level} class="titlel{level}std">{original_title}</h{level}>\n{html_content}'
@@ -411,7 +306,6 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
         level = chap_info['level']
         filename = chap_info['filename']
         
-        # 【核心修正】: 恢复使用原始标题作为TOC链接文本
         if level == 1:
             l1_link = epub.Link(filename, original_title, f'uid_{filename}')
             l1_section = (l1_link, [])
