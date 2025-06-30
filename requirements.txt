@@ -11,4 +11,5 @@ lxml
 tqdm
 requests
 pypinyin
+browser-cookie3
 markdown2

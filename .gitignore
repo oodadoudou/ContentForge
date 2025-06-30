@@ -1,29 +1,71 @@
-# Python 缓存
+# ==================================
+#      Python & General Caching
+# ==================================
+# Python 缓存文件
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py-e
 
-# 虚拟环境
+# ==================================
+#         Virtual Environments
+# ==================================
+# 标准的 Python 虚拟环境文件夹
 venv/
 env/
 .venv/
 
-# 操作系统特定文件
+# ==================================
+#      Operating System Files
+# ==================================
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
+.LSOverride
 
-# IDE/编辑器配置
+# Windows
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+
+# ==================================
+#        IDE / Editor Config
+# ==================================
 .idea/
 .vscode/
+*.swp
+*~
 
-# 敏感配置文件 (!!!)
+# ==================================
+#        Sensitive Config Files (!!!)
+#      !!! 不要将这些文件上传到公开仓库 !!!
+# ==================================
+# 全局配置文件，可能包含 API Key
 shared_assets/settings.json
-01_acquisition/bomtoontw.json
+
+# Bomtoon 登录凭证文件
+01_acquisition/bomtoontw-session
+
+# 翻译脚本生成的临时运行文件
 _temp_runner.py
 
-# 输出文件夹
+# ==================================
+#          Output Folders
+# ==================================
+# 脚本处理后生成的文件夹，应在本地生成，无需追踪
+**/processed_files/
+**/translated_files/
 **/merged_pdfs/
 **/merged_long_img/
 **/split_by_solid_band/
 **/merged_output/
+
+# ==================================
+#         Log & Temp Files
+# ==================================
+# 通用的日志和临时文件
+*.log
+*.tmp
+*.temp
