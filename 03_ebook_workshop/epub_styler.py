@@ -6,17 +6,20 @@ import tempfile
 
 # --- 配置 ---
 NEW_CSS_FILENAME = "new_style.css"
+SHARED_ASSETS_DIR_NAME = "shared_assets"
 OUTPUT_DIR_NAME = "processed_files"
-# 获取脚本（.py）和样式（.css）所在的目录
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def get_new_css_content():
-    """读取新CSS文件的内容"""
-    css_path = os.path.join(SCRIPT_DIR, NEW_CSS_FILENAME)
+    """根据新的目录结构，读取shared_assets中的CSS文件内容"""
+    css_path = os.path.join(PROJECT_ROOT, SHARED_ASSETS_DIR_NAME, NEW_CSS_FILENAME)
+    
     if not os.path.exists(css_path):
-        print(f"错误: 样式文件 '{NEW_CSS_FILENAME}' 未在脚本目录中找到。")
+        print(f"错误: 样式文件 '{NEW_CSS_FILENAME}' 未在 '{SHARED_ASSETS_DIR_NAME}' 目录中找到。")
         print(f"请确保 '{css_path}' 文件存在。")
         return None
+    
     with open(css_path, 'r', encoding='utf-8') as f:
         return f.read()
 
