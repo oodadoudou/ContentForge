@@ -24,7 +24,7 @@ LONG_IMAGE_FILENAME_BASE = "stitched_long_strip"
 IMAGE_EXTENSIONS_FOR_MERGE = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif')
 
 # --- V3 核心分割逻辑配置 (颜色方差分析) ---
-MIN_SOLID_COLOR_BAND_HEIGHT = 100
+MIN_SOLID_COLOR_BAND_HEIGHT = 50
 COLOR_VARIANCE_THRESHOLD = 60
 
 # 重打包时，单个图片文件的最大檔案大小 (MB)
@@ -32,9 +32,9 @@ MAX_REPACKED_FILESIZE_MB = 8
 # [V3 新增] 重打包时，单个图片文件的最大像素高度，以优化阅读体验
 MAX_REPACKED_PAGE_HEIGHT_PX = 30000
 # 所有图片在处理流程开始时，就会被统一到这个宽度
-PDF_TARGET_PAGE_WIDTH_PIXELS = 1500
+PDF_TARGET_PAGE_WIDTH_PIXELS = 1100
 # 提升JPEG压缩质量以获得更清晰的图像
-PDF_IMAGE_JPEG_QUALITY = 85
+PDF_IMAGE_JPEG_QUALITY = 90
 PDF_DPI = 300
 # --- 全局配置结束 ---
 
