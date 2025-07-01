@@ -30,10 +30,10 @@ def menu_comic_processing():
         elif choice == '2':
             # 运行最新的V3版本，作为备用选项
             utils.run_script("image_processes_pipeline_v3.py", cwd=module_path)
-        elif choice == '2':
+        elif choice == '3':
             # 运行最新的V4版本，作为备用选项
             utils.run_script("image_processes_pipeline_v4.py", cwd=module_path)
-        elif choice == '3':
+        elif choice == '4':
             utils.run_script("convert_to_pdf.py", cwd=module_path)
         elif choice == '8':
             utils.show_usage(module_path)
