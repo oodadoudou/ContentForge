@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 
 def fix_text_file_encoding(file_path, output_path):
     """
@@ -45,12 +46,25 @@ def fix_text_file_encoding(file_path, output_path):
     except Exception as e:
         print(f"  - [错误] 写入新文件时失败: {e}")
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
 def main():
     """
     脚本主函数，负责处理用户输入和文件遍历。
     """
-    # 定义默认目录
-    default_path = "/Users/doudouda/Downloads/2/"
+    # --- 修改：动态加载默认路径 ---
+    default_path = load_default_path_from_settings()
     
     # 提示用户输入，并显示默认值
     prompt_message = f"请输入需要处理的 TXT 文件所在目录 (直接按回车将使用: {default_path}): "

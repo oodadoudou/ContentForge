@@ -4,6 +4,9 @@ from PIL import Image, ImageDraw, ImageFile
 import natsort
 import sys
 import datetime
+import concurrent.futures
+from io import BytesIO
+import json
 
 # --- 全局配置 ---
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -15,6 +18,7 @@ MAX_IMAGE_DIMENSION_FOR_PDF = 65000
 MERGED_LONG_IMAGE_SUBDIR_NAME = "merged_long_img"
 SPLIT_IMAGES_SUBDIR_NAME = "split_by_solid_band"
 FINAL_PDFS_SUBDIR_NAME = "merged_pdfs"
+REPACKED_IMAGES_SUBDIR_NAME = "repacked_for_pdf" # 新增：Repack 目录名
 
 LONG_IMAGE_FILENAME_BASE = "stitched_long_strip"
 IMAGE_EXTENSIONS_FOR_MERGE = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif')
@@ -22,8 +26,14 @@ IMAGE_EXTENSIONS_FOR_MERGE = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', 
 MIN_SOLID_COLOR_BAND_HEIGHT = 125
 
 PDF_TARGET_PAGE_WIDTH_PIXELS = 1500
-PDF_IMAGE_JPEG_QUALITY = 80
+PDF_IMAGE_JPEG_QUALITY = 90
 PDF_DPI = 300
+
+# 新增：Repack 配置
+MAX_REPACKED_IMAGE_FILESIZE_MB = 5
+MAX_REPACKED_IMAGE_FILESIZE_BYTES = MAX_REPACKED_IMAGE_FILESIZE_MB * 1024 * 1024
+REPACK_OUTPUT_FORMAT = 'PNG' # Repack后保存的格式
+
 # --- 全局配置结束 ---
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
@@ -249,7 +259,6 @@ def split_long_image(long_image_path, output_split_dir, min_solid_band_height):
 
     return natsort.natsorted(split_image_paths)
 
-# ▼▼▼ 函数已修改 ▼▼▼
 def further_split_large_images(image_paths, max_dim, output_dir):
     """
     接收一个图片路径列表，检查它们的尺寸，并分割任何高度过大的图片。
@@ -300,10 +309,129 @@ def further_split_large_images(image_paths, max_dim, output_dir):
     else:
         print(f"    校验完成。未发现尺寸过大的图片块。")
 
-    # 返回路径列表 和 额外分割的次数
     return natsort.natsorted(final_safe_image_paths), sub_split_count
-# ▲▲▲ 函数已修改 ▲▲▲
 
+# ▼▼▼ Repack Images 函数区 (已使用并行和增量构建进行优化) ▼▼▼
+def save_repacked_strip_task(canvas_to_save, output_path, output_format, jpeg_quality):
+    """
+    用於並行處理的儲存任務。接收一個PIL畫布物件並將其儲存到磁碟。
+    """
+    try:
+        # 如果目標格式是JPEG，先轉換為RGB
+        if output_format.upper() == 'JPEG' and canvas_to_save.mode != 'RGB':
+            canvas_to_save = canvas_to_save.convert('RGB')
+        
+        # 執行儲存操作
+        canvas_to_save.save(output_path, format=output_format, quality=jpeg_quality, optimize=True)
+        return output_path
+    except Exception as e:
+        print(f"\n    (線程) 錯誤: 儲存重新拼接圖片 '{os.path.basename(output_path)}' 失敗: {e}")
+        return None
+    finally:
+        # 確保畫布物件被關閉以釋放記憶體
+        if canvas_to_save:
+            canvas_to_save.close()
+
+def repack_images_to_max_size(image_paths, output_dir, max_filesize_bytes, output_format='PNG'):
+    """
+    (優化版) 將一系列圖片垂直拼接成新的長圖，同時確保每個長圖的檔案大小不超過指定限制。
+    此版本使用增量構建和並行儲存來提升速度。
+    """
+    print(f"\n  --- 步骤 2.7: 重新拼接图片以优化 PDF 页数 (每张不超過 {MAX_REPACKED_IMAGE_FILESIZE_MB}MB) ---")
+    if not image_paths:
+        print("    沒有圖片可供重新拼接。")
+        return []
+
+    os.makedirs(output_dir, exist_ok=True)
+    
+    repacked_image_paths = []
+    
+    current_canvas = None
+    current_canvas_width = 0
+    current_canvas_height = 0
+    
+    repack_index = 1
+    
+    max_workers = min(4, os.cpu_count() or 1) 
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+
+        total_images_to_repack = len(image_paths)
+        if total_images_to_repack > 0:
+            print_progress_bar(0, total_images_to_repack, prefix='    拼接图片块:', suffix='完成', length=40)
+
+        for i, img_path in enumerate(image_paths):
+            try:
+                with Image.open(img_path) as img:
+                    img.load()
+                    img_rgba = img.convert("RGBA")
+
+                    if current_canvas is None:
+                        current_canvas = img_rgba
+                        current_canvas_width = img_rgba.width
+                        current_canvas_height = img_rgba.height
+                        continue
+
+                    new_width = max(current_canvas_width, img_rgba.width)
+                    new_height = current_canvas_height + img_rgba.height
+                    
+                    proposed_canvas = Image.new('RGBA', (new_width, new_height))
+                    proposed_canvas.paste(current_canvas, ((new_width - current_canvas_width) // 2, 0))
+                    proposed_canvas.paste(img_rgba, ((new_width - img_rgba.width) // 2, current_canvas_height))
+
+                    mem_buffer = BytesIO()
+                    save_format = output_format
+                    canvas_for_size_check = proposed_canvas
+                    if save_format.upper() == 'JPEG':
+                         canvas_for_size_check = proposed_canvas.convert('RGB')
+                    
+                    canvas_for_size_check.save(mem_buffer, format=save_format, quality=PDF_IMAGE_JPEG_QUALITY)
+                    file_size = mem_buffer.tell()
+                    mem_buffer.close()
+
+                    if file_size > max_filesize_bytes and current_canvas is not None:
+                        output_filename = f"repacked_part_{repack_index}.{output_format.lower()}"
+                        output_filepath = os.path.join(output_dir, output_filename)
+                        print(f"\n    当前拼接长图大小将超限，提交保存任务: {output_filename}")
+                        
+                        future = executor.submit(save_repacked_strip_task, current_canvas, output_filepath, output_format, PDF_IMAGE_JPEG_QUALITY)
+                        futures.append(future)
+                        repack_index += 1
+                        
+                        current_canvas = img_rgba
+                        current_canvas_width = img_rgba.width
+                        current_canvas_height = img_rgba.height
+
+                    else:
+                        current_canvas.close()
+                        current_canvas = proposed_canvas
+                        current_canvas_width = new_width
+                        current_canvas_height = new_height
+
+                img_rgba.close()
+
+            except Exception as e:
+                print(f"\n    警告: 重新拼接图片 '{os.path.basename(img_path)}' 失败: {e}。已跳过。")
+            finally:
+                print_progress_bar(i + 1, total_images_to_repack, prefix='    拼接图片块:', suffix='完成', length=40)
+
+        if current_canvas is not None:
+            output_filename = f"repacked_part_{repack_index}.{output_format.lower()}"
+            output_filepath = os.path.join(output_dir, output_filename)
+            print(f"\n    提交最后一个拼接长图的保存任务: {output_filename}")
+            future = executor.submit(save_repacked_strip_task, current_canvas, output_filepath, output_format, PDF_IMAGE_JPEG_QUALITY)
+            futures.append(future)
+
+        print("\n    等待所有图片保存任务完成...")
+        for future in concurrent.futures.as_completed(futures):
+            result_path = future.result()
+            if result_path:
+                repacked_image_paths.append(result_path)
+
+    print(f"    完成图片重新拼接。共生成 {len(repacked_image_paths)} 个新的图片文件。")
+    return natsort.natsorted(repacked_image_paths)
+
+# ▲▲▲ Repack Images 函数区结束 ▲▲▲
 
 def create_pdf_from_images(image_paths_list, output_pdf_dir, pdf_filename_only,
                            target_page_width_px, image_jpeg_quality, pdf_target_dpi):
@@ -379,10 +507,14 @@ def create_pdf_from_images(image_paths_list, output_pdf_dir, pdf_filename_only,
                 pass
 
 
-def cleanup_intermediate_dirs(long_img_dir, split_img_dir):
+def cleanup_intermediate_dirs(long_img_dir, split_img_dir, repacked_img_dir=None):
     """清理指定的中间文件目录。"""
     print(f"\n  --- 步骤 4: 清理中间文件 ---")
-    for dir_to_remove, dir_name_for_log in [(long_img_dir, "长图合并"), (split_img_dir, "图片分割")]:
+    dirs_to_clean = [(long_img_dir, "长图合并"), (split_img_dir, "图片分割")]
+    if repacked_img_dir:
+        dirs_to_clean.append((repacked_img_dir, "图片重新拼接"))
+
+    for dir_to_remove, dir_name_for_log in dirs_to_clean:
         if os.path.isdir(dir_to_remove):
             try:
                 shutil.rmtree(dir_to_remove)
@@ -390,22 +522,42 @@ def cleanup_intermediate_dirs(long_img_dir, split_img_dir):
             except Exception as e:
                 print(f"    删除文件夹 '{dir_to_remove}' 失败: {e}")
 
-# ▼▼▼ 主程序已修改 ▼▼▼
 if __name__ == "__main__":
     start_time = datetime.datetime.now()
-    print("自动化图片批量处理脚本已启动！")
-    print("功能：针对每个子文件夹，将执行 1.合并 -> 2.按内容分割 -> 2.5 按尺寸分割 -> 3.创建PDF -> 4.清理")
+    print("自动化图片批量处理脚本已启动！ (版本: 1.2 - 优化Repack)")
+    print("功能：针对每个子文件夹，将执行 1.合并 -> 2.按内容分割 -> 2.5 按尺寸分割 -> 2.7 重新拼接 -> 3.创建PDF -> 4.清理")
     print("-" * 70)
     print("全局配置 (可在脚本顶部修改):")
     print(f"  - PDF图片尺寸限制: {MAX_IMAGE_DIMENSION_FOR_PDF}px (用以防止 'broken data stream' 错误)")
     print(f"  - 长图合并临时目录名: {MERGED_LONG_IMAGE_SUBDIR_NAME}")
     print(f"  - 图片分割临时目录名: {SPLIT_IMAGES_SUBDIR_NAME}")
+    print(f"  - 图片重新拼接临时目录名: {REPACKED_IMAGES_SUBDIR_NAME}")
+    print(f"  - 单个重新拼接图片最大文件大小: {MAX_REPACKED_IMAGE_FILESIZE_MB}MB")
     print(f"  - 最终PDF输出目录名 (在根目录下): {FINAL_PDFS_SUBDIR_NAME}")
     print(f"  - PDF: 页面宽度={PDF_TARGET_PAGE_WIDTH_PIXELS}px, JPEG质量={PDF_IMAGE_JPEG_QUALITY}, DPI={PDF_DPI}")
     print("-" * 70)
 
+    # --- 新增：動態讀取設定檔以獲取預設路徑 ---
+    def load_default_path_from_settings():
+        """從共享設定檔中讀取預設工作目錄。"""
+        try:
+            # 向上兩層找到專案根目錄，再定位到 settings.json
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+            # 如果 default_work_dir 為空或 None，也視為無效
+            default_dir = settings.get("default_work_dir")
+            return default_dir if default_dir else "."
+        except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+            print(f"警告：讀取 settings.json 失敗 ({e})，將使用內建備用路徑。")
+            # 在無法讀取設定檔時，提供一個通用的備用路徑
+            return os.path.join(os.path.expanduser("~"), "Downloads")
+
+    default_root_dir_name = load_default_path_from_settings()
+    # --- 修改結束 ---
+    
     root_input_dir = ""
-    default_root_dir_name = "/Users/doudouda/Downloads/2"
     while True:
         prompt_message = (
             f"请输入包含多个一级子文件夹的【根目录】路径。\n"
@@ -441,7 +593,7 @@ if __name__ == "__main__":
 
     subdirectories = [d for d in os.listdir(root_input_dir)
                       if os.path.isdir(os.path.join(root_input_dir, d)) and \
-                         d not in [MERGED_LONG_IMAGE_SUBDIR_NAME, SPLIT_IMAGES_SUBDIR_NAME, FINAL_PDFS_SUBDIR_NAME] and \
+                         d not in [MERGED_LONG_IMAGE_SUBDIR_NAME, SPLIT_IMAGES_SUBDIR_NAME, FINAL_PDFS_SUBDIR_NAME, REPACKED_IMAGES_SUBDIR_NAME] and \
                          not d.startswith('.')]
 
     if not subdirectories:
@@ -454,9 +606,9 @@ if __name__ == "__main__":
     total_subdirs_to_process = len(sorted_subdirectories)
     overall_progress_prefix = "总进度 (子文件夹):"
     
-    # 初始化报告所需变量
     failed_subdirs_list = []
     extra_split_projects = []
+    repacked_projects = [] 
 
     for i, subdir_name in enumerate(sorted_subdirectories):
         if total_subdirs_to_process > 0:
@@ -467,6 +619,7 @@ if __name__ == "__main__":
 
         path_long_image_output_dir_current = os.path.join(current_processing_subdir, MERGED_LONG_IMAGE_SUBDIR_NAME)
         path_split_images_output_dir_current = os.path.join(current_processing_subdir, SPLIT_IMAGES_SUBDIR_NAME)
+        path_repacked_images_output_dir_current = os.path.join(current_processing_subdir, REPACKED_IMAGES_SUBDIR_NAME)
 
         current_long_image_filename = f"{subdir_name}_{LONG_IMAGE_FILENAME_BASE}.png"
 
@@ -478,28 +631,39 @@ if __name__ == "__main__":
 
         pdf_created_for_this_subdir = False
         if created_long_image_path:
-            # 步骤 2: 按纯色带分割
             split_segment_paths = split_long_image(
                 created_long_image_path,
                 path_split_images_output_dir_current,
                 MIN_SOLID_COLOR_BAND_HEIGHT
             )
             
-            # 步骤 2.5: 再次分割尺寸过大的图片块
             final_safe_paths, sub_split_count = further_split_large_images(
                 split_segment_paths,
                 MAX_IMAGE_DIMENSION_FOR_PDF,
                 path_split_images_output_dir_current
             )
             
-            # 如果发生了额外分割，记录项目名
             if sub_split_count > 0:
                 extra_split_projects.append(subdir_name)
 
             if final_safe_paths:
+                repacked_segment_paths = repack_images_to_max_size(
+                    final_safe_paths,
+                    path_repacked_images_output_dir_current,
+                    MAX_REPACKED_IMAGE_FILESIZE_BYTES,
+                    REPACK_OUTPUT_FORMAT
+                )
+                if len(repacked_segment_paths) < len(final_safe_paths):
+                    repacked_projects.append(subdir_name)
+
+                images_for_pdf = repacked_segment_paths if repacked_segment_paths else final_safe_paths
+            else:
+                images_for_pdf = []
+
+            if images_for_pdf:
                 dynamic_pdf_filename_for_subdir = subdir_name + ".pdf"
                 created_pdf_path = create_pdf_from_images(
-                    final_safe_paths,
+                    images_for_pdf,
                     overall_pdf_output_dir,
                     dynamic_pdf_filename_for_subdir,
                     PDF_TARGET_PAGE_WIDTH_PIXELS,
@@ -510,7 +674,7 @@ if __name__ == "__main__":
                     pdf_created_for_this_subdir = True
 
         if pdf_created_for_this_subdir:
-            cleanup_intermediate_dirs(path_long_image_output_dir_current, path_split_images_output_dir_current)
+            cleanup_intermediate_dirs(path_long_image_output_dir_current, path_split_images_output_dir_current, path_repacked_images_output_dir_current)
         else:
             print(f"  子文件夹 '{subdir_name}' 未能成功生成PDF或在之前的步骤中失败/跳过，将保留其中间文件（如果有）。")
             failed_subdirs_list.append(subdir_name)
@@ -547,6 +711,17 @@ if __name__ == "__main__":
     else:
         print("【额外长图分割项目列表】")
         print("  本次任务中没有项目触发额外长图分割。")
+        print("-" * 70)
+    
+    if repacked_projects:
+        print("【图片重新拼接项目列表】")
+        print(f"  以下项目因图片块被重新拼接以控制文件大小 (限制: {MAX_REPACKED_IMAGE_FILESIZE_MB}MB)：")
+        for proj_name in repacked_projects:
+            print(f"  - {proj_name}")
+        print("-" * 70)
+    else:
+        print("【图片重新拼接项目列表】")
+        print("  本次任务中没有项目触发图片重新拼接。")
         print("-" * 70)
 
     if failed_subdirs_list:

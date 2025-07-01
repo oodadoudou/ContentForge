@@ -1,14 +1,11 @@
-# epub_to_txt_convertor.py
-
 import os
 import sys
 from ebooklib import epub, ITEM_DOCUMENT
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+import json
 
 # --- 配置 ---
-# 设置默认的源文件目录
-DEFAULT_DIR = '/Users/doudouda/Downloads/2/' 
 # 设置输出文件夹的名称
 OUTPUT_DIR_NAME = 'processed_files' 
 
@@ -30,7 +27,6 @@ def convert_epub_to_txt(epub_path, output_txt_path):
         all_paragraphs = []
 
         # 遍历 EPUB 中的所有文档项 (通常是章节的 XHTML 文件)
-        # 使用 book.get_items_of_type 获取生成器以提高效率
         for item in book.get_items_of_type(ITEM_DOCUMENT):
             # 获取章节内容的原始 HTML
             html_content = item.get_content()
@@ -42,13 +38,12 @@ def convert_epub_to_txt(epub_path, output_txt_path):
             paragraphs = soup.find_all('p')
             
             for p in paragraphs:
-                # 获取 <p> 标签内的所有文本，.get_text() 会自动处理嵌套的 <span> 等标签
-                # 使用 ' ' 作为分隔符，并用 strip() 清除首尾多余的空白
+                # 获取 <p> 标签内的所有文本
                 text = p.get_text(' ', strip=True)
                 if text: # 确保不添加空段落
                     all_paragraphs.append(text)
         
-        # 将所有段落用两个换行符（即一个空行）连接起来，以维持格式
+        # 将所有段落用两个换行符（即一个空行）连接起来
         final_text = "\n\n".join(all_paragraphs)
         
         # 将最终的文本内容以 UTF-8 编码写入 TXT 文件
@@ -62,16 +57,32 @@ def convert_epub_to_txt(epub_path, output_txt_path):
         print(f"\n[!] 处理文件 '{os.path.basename(epub_path)}' 时发生错误: {e}")
         return False
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
 def main():
     """
     主函数，处理用户输入、目录扫描和文件转换流程。
     """
     print("--- EPUB to TXT 转换工具 ---")
 
+    # --- 修改：动态加载默认路径 ---
+    default_dir = load_default_path_from_settings()
+    
     # 获取用户输入，如果用户直接按回车，则使用默认路径
-    input_dir = input(f"请输入包含 EPUB 文件的目录 (默认为: {DEFAULT_DIR}): ").strip()
+    input_dir = input(f"请输入包含 EPUB 文件的目录 (默认为: {default_dir}): ").strip()
     if not input_dir:
-        input_dir = DEFAULT_DIR
+        input_dir = default_dir
         print(f"[*] 未输入路径，已使用默认目录: {input_dir}")
 
     # 检查指定的目录是否存在

@@ -34,8 +34,10 @@ def configure_default_path(first_time=False):
     """交互式配置默认工作目录"""
     if first_time:
         utils.print_header("首次运行设置")
-        print("为了方便使用，请先设置一个默认的工作目录。")
-        print("之后所有需要输入路径的地方，都会将此目录作为默认选项。")
+        print("欢迎使用 ContentForge！这是一个功能强大的内容处理工具集。")
+        print("为了方便后续操作，请先设置一个默认的工作目录。")
+        print("例如：'D:\\Downloads' 或 '/Users/YourName/Documents'")
+        print("之后所有模块需要输入路径时，都会将此目录作为默认选项。")
     else:
         utils.print_header("配置默认工作目录")
     
@@ -92,13 +94,17 @@ def menu_install_dependencies():
     print(f"将使用 pip 安装 '{requirements_path}' 中的所有依赖。")
     if utils.get_input("是否继续? (按回车确认, 输入 n 取消): ").lower() != 'n':
         try:
-            command = f'"{sys.executable}" -m pip install -r "{requirements_path}"'
+            # --- 修改：简化指令以提高跨平台兼容性 ---
+            command = f'pip install -r "{requirements_path}"'
             print(f"\n▶️  正在执行: {command}")
+            print("注意：此操作依赖于 'pip' 在您系统的环境变量中。")
             print("-" * 60)
             subprocess.check_call(command, shell=True)
             print("\n✅ 依赖安装成功！")
         except subprocess.CalledProcessError as e:
             print(f"\n❌ 依赖安装失败。错误: {e}")
+        except FileNotFoundError:
+            print("\n❌ 错误: 'pip' 命令未找到。请确保 Python 和 Pip 已正确安装并已添加到您系统的 PATH 环境变量中。")
         except Exception as e:
             print(f"\n❌ 发生未知错误: {e}")
     
@@ -130,9 +136,24 @@ def menu_system_settings():
 
 def main():
     """主函数，显示主菜单并调用子模块入口。"""
-    utils.load_settings()
-    if not os.path.isdir(utils.settings.get('default_work_dir', '')):
+    
+    # --- 新增：首次运行检查 ---
+    settings_path = os.path.join(PROJECT_ROOT, 'shared_assets', 'settings.json')
+
+    # 检查配置文件是否存在
+    if not os.path.exists(settings_path):
+        # 如果不存在，则认为是首次运行，引导用户进行配置
         configure_default_path(first_time=True)
+    
+    # 无论文件之前是否存在，现在都加载配置
+    # 如果文件是新创建的，会加载新配置；如果已存在，则加载现有配置
+    utils.load_settings()
+
+    # 保留一个备用检查：防止 settings.json 存在但 default_work_dir 无效
+    if not os.path.isdir(utils.settings.get('default_work_dir', '')):
+        print("\n警告：检测到配置文件中的默认工作目录无效或未设置。")
+        configure_default_path(first_time=False)
+
 
     main_menu = {
         '1': ('内容获取 (从网站下载漫画)', '01_acquisition/01_start_up.py'),

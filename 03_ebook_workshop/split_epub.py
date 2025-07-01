@@ -3,9 +3,9 @@ import sys
 from collections import deque
 from ebooklib import epub, ITEM_DOCUMENT
 import math
+import json
 
 # --- 配置 ---
-DEFAULT_DIR = '/Users/doudouda/Downloads/2/'
 OUTPUT_DIR_NAME = 'processed_files'
 
 def get_nav_points(toc):
@@ -59,9 +59,7 @@ def process_epub_file(epub_path, num_splits, output_dir):
     
     split_sizes = [base_size + 1] * remainder + [base_size] * (num_splits - remainder)
     
-    # --- 变更 2: 使用正确的常量名 ITEM_DOCUMENT ---
-    # 获取所有非章节项目 (如 CSS, 图像, 字体等), 以便添加到每个新文件中
-    # 这是确保分割后的文件样式和图片正常的关键
+    # 获取所有非章节项目 (如 CSS, 图像, 字体等)
     non_document_items = [item for item in original_book.get_items() if item.get_type() != ITEM_DOCUMENT]
 
     current_chapter_index = 0
@@ -73,7 +71,6 @@ def process_epub_file(epub_path, num_splits, output_dir):
         
         # --- 复制元数据 ---
         try:
-            # 使用原始书的元数据, 并添加后缀以示区分
             original_identifier = original_book.get_metadata('DC', 'identifier')[0][0]
             original_title = original_book.get_metadata('DC', 'title')[0][0]
             original_language = original_book.get_metadata('DC', 'language')[0][0]
@@ -82,7 +79,6 @@ def process_epub_file(epub_path, num_splits, output_dir):
             new_book.set_title(f"{original_title} (Part {part_num}/{num_splits})")
             new_book.set_language(original_language)
         except IndexError:
-            # 如果缺少元数据, 设置一个默认值
             base_name = os.path.splitext(os.path.basename(epub_path))[0]
             new_book.set_identifier(f"unknown-id-{base_name}-part{part_num}")
             new_book.set_title(f"{base_name} (Part {part_num}/{num_splits})")
@@ -98,19 +94,15 @@ def process_epub_file(epub_path, num_splits, output_dir):
         new_book.toc = chapters_for_this_part
         new_book.spine = []
 
-        # 将此部分所需的章节内容添加到新书中
         for chapter_link in chapters_for_this_part:
             item = original_book.get_item_with_href(chapter_link.href)
             if item:
                 new_book.add_item(item)
-                # spine 决定了阅读顺序, 必须包含所有章节
                 new_book.spine.append(item)
 
-        # 添加所有非章节的依赖项 (CSS, 图片等)
         for item in non_document_items:
             new_book.add_item(item)
 
-        # 添加必要的 NCX 和 NAV 文件
         new_book.add_item(epub.EpubNcx())
         new_book.add_item(epub.EpubNav())
 
@@ -127,14 +119,30 @@ def process_epub_file(epub_path, num_splits, output_dir):
 
         current_chapter_index = end_index
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
 def main():
     """
     主函数, 用于获取用户输入并启动处理流程.
     """
+    # --- 修改：动态加载默认路径 ---
+    default_dir = load_default_path_from_settings()
+    
     # --- 获取用户输入 ---
-    input_dir = input(f"请输入 EPUB 文件所在的目录 (默认为: {DEFAULT_DIR}): ").strip()
+    input_dir = input(f"请输入 EPUB 文件所在的目录 (默认为: {default_dir}): ").strip()
     if not input_dir:
-        input_dir = DEFAULT_DIR
+        input_dir = default_dir
 
     if not os.path.isdir(input_dir):
         print(f"[FATAL] 错误: 目录 '{input_dir}' 不存在. 程序退出.")

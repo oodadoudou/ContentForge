@@ -6,6 +6,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 import shutil
 from ebooklib import epub
+import json
 
 # =================================================================
 #         新增：从 remove_nav.py 参考并集成的核心功能
@@ -105,20 +106,6 @@ def print_progress_bar(iteration, total, prefix='进度', suffix='完成', lengt
     if iteration == total:
         sys.stdout.write('\n')
 
-def get_user_input_path():
-    """获取用户输入的工作目录路径。"""
-    default_path = "/Users/doudouda/Downloads/2/"
-    path = input(f"请输入TXT文件所在的目录 (默认为: {default_path}): ").strip()
-    if not path:
-        path = default_path
-    
-    if not os.path.isdir(path):
-        print(f"\n[错误] 目录 '{path}' 不存在。请检查路径是否正确。")
-        sys.exit(1)
-        
-    print(f"\n工作目录设置为: {path}")
-    return path
-
 def scan_directory(work_dir):
     """扫描目录，查找 TXT, 封面图片和 CSS 文件。"""
     txt_files, cover_image_path, css_content = [], None, None
@@ -152,7 +139,7 @@ def scan_directory(work_dir):
             default_css_path = os.path.join(project_root, 'shared_assets', "new_style.css")
             with open(default_css_path, 'r', encoding='utf-8') as f:
                 css_content = f.read()
-            print(f"  [加载样式] 成功加载默认样式: {default_css_path}")
+            print(f"  [加载样式] 成功加载默认样式: {os.path.basename(default_css_path)}")
         except Exception as e:
             print(f"\n[致命错误] 加载默认样式失败: {e}")
             sys.exit(1)
@@ -281,18 +268,16 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
 
     print("[LOG] 开始在原文中定位所有章节标题...")
     all_headings_map = []
-    # --- FIX: Simplified regex for better group capturing ---
     combined_regex_str = f"({l2_regex})|({l1_regex})" if l2_regex else f"({l1_regex})"
     pattern = re.compile(combined_regex_str, re.MULTILINE)
 
     for match in pattern.finditer(full_text):
         title, level = None, None
-        # --- FIX: Corrected group index logic for combined regex ---
-        if l2_regex and match.group(1): # Matched L2 (group 1 is the full L2 match)
-            title = match.group(2).strip() # group 2 is the title part of L2
+        if l2_regex and match.group(1):
+            title = match.group(2).strip()
             level = 2
-        elif match.group(3): # Matched L1 (group 3 is the full L1 match)
-            title = match.group(4).strip() # group 4 is the title part of L1
+        elif match.group(3):
+            title = match.group(4).strip()
             level = 1
         
         if title is not None and any(toc_title == title for toc_title, toc_level in final_toc if toc_level == level):
@@ -358,7 +343,6 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
         epub.write_epub(output_path, book, {})
         print(f"\n[成功] EPUB 文件已保存到: {output_path}")
 
-        # --- MODIFICATION: Ask user for confirmation before removing nav ---
         if len(final_toc) > 15:
             print("-" * 50)
             prompt = (f"[提示] 检测到目录超过15项 ({len(final_toc)}项)，这可能影响在某些设备上的阅读体验。\n"
@@ -372,12 +356,35 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
     except Exception as e:
         print(f"  [错误] 写入 EPUB 文件时失败: {e}")
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
 if __name__ == "__main__":
     print("="*60)
     print(" " * 18 + "TXT to EPUB 转换器")
     print("="*60)
     
-    work_directory = get_user_input_path()
+    # --- 修改：动态加载默认路径并获取用户输入 ---
+    default_path = load_default_path_from_settings()
+    path_input = input(f"请输入TXT文件所在的目录 (默认为: {default_path}): ").strip()
+    work_directory = path_input if path_input else default_path
+    
+    if not os.path.isdir(work_directory):
+        print(f"\n[错误] 目录 '{work_directory}' 不存在。请检查路径是否正确。")
+        sys.exit(1)
+        
+    print(f"\n工作目录设置为: {work_directory}")
+    # --- 修改结束 ---
     
     output_dir = os.path.join(work_directory, "processed_files")
     os.makedirs(output_dir, exist_ok=True)

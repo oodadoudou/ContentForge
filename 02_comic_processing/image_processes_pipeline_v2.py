@@ -6,6 +6,7 @@ import sys
 from collections import Counter
 import math
 import traceback
+import json
 
 # --- 全局配置 ---
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -19,12 +20,10 @@ LONG_IMAGE_FILENAME_BASE = "stitched_long_strip"
 IMAGE_EXTENSIONS_FOR_MERGE = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif')
 
 MIN_SOLID_COLOR_BAND_HEIGHT = 100
-COLOR_MATCH_TOLERANCE = 25
+COLOR_MATCH_TOLERANCE = 20
 
 SPLIT_BAND_COLORS_RGB = [
-    (255, 255, 255), (0, 0, 0), (124, 115, 112), (52, 51, 57),
-    (104, 104, 98), (92, 95, 85), (130, 121, 118), (121, 112, 109),
-    (245, 245, 245), (250, 250, 250)
+    (255, 255, 255), (0, 0, 0)
 ]
 
 PDF_TARGET_PAGE_WIDTH_PIXELS = 1500
@@ -329,7 +328,7 @@ def _merge_image_list_for_repack(image_paths, output_path):
     merged_canvas.save(output_path, "PNG")
     return True
 
-# ▼▼▼ 此函数已更新 ▼▼▼
+
 def repack_split_images(split_image_paths, output_dir, base_filename, max_size_mb=5):
     """
     将分割后的图片按大小重新打包合并。
@@ -416,7 +415,6 @@ def repack_split_images(split_image_paths, output_dir, base_filename, max_size_m
             print(f"      无法删除原始文件 {os.path.basename(path)}: {e}")
 
     return natsort.natsorted(repacked_paths)
-# ▲▲▲ 函数更新结束 ▲▲▲
 
 def create_pdf_from_images(image_paths_list, output_pdf_dir, pdf_filename_only,
                            target_page_width_px, image_jpeg_quality, pdf_target_dpi):
@@ -460,7 +458,7 @@ def create_pdf_from_images(image_paths_list, output_pdf_dir, pdf_filename_only,
                     ratio = target_page_width_px / original_width
                     new_height = int(original_height * ratio)
                     if new_height <=0: new_height = 1
-                    img_resized = img_to_process.resize((target_page_width_px, Image.Resampling.LANCZOS))
+                    img_resized = img_to_process.resize((target_page_width_px, new_height), Image.Resampling.LANCZOS)
                 else:
                     img_resized = img_to_process.copy()
 
@@ -512,13 +510,33 @@ def cleanup_intermediate_dirs(long_img_dir, split_img_dir):
             except Exception as e:
                 print(f"    删除文件夹 '{dir_to_remove}' 失败: {e}")
 
+# ▼▼▼ 主程式區塊已修改 ▼▼▼
 if __name__ == "__main__":
     print("自动化图片批量处理流程脚本启动！ (V3.2 - 更新打包逻辑)")
     print("功能：1.合并 -> 2.分割 -> 2.5.重打包 -> 3.创建PDF -> 4.清理")
     print("-" * 70)
     
+    # --- 新增：動態讀取設定檔以獲取預設路徑 ---
+    def load_default_path_from_settings():
+        """從共享設定檔中讀取預設工作目錄。"""
+        try:
+            # 向上兩層找到專案根目錄，再定位到 settings.json
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+            # 如果 default_work_dir 為空或 None，也視為無效
+            default_dir = settings.get("default_work_dir")
+            return default_dir if default_dir else "."
+        except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+            print(f"警告：讀取 settings.json 失敗 ({e})，將使用內建備用路徑。")
+            # 在無法讀取設定檔時，提供一個通用的備用路徑
+            return os.path.join(os.path.expanduser("~"), "Downloads")
+    
+    default_root_dir_name = load_default_path_from_settings()
+    # --- 修改結束 ---
+
     root_input_dir = ""
-    default_root_dir_name = "/Users/doudouda/Downloads/2"
     while True:
         prompt_message = (
             f"请输入包含多个一级子文件夹的【根目录】路径。\n"
@@ -587,14 +605,12 @@ if __name__ == "__main__":
                 COLOR_MATCH_TOLERANCE
             )
 
-            # ▼▼▼ 调用更新后的重打包函数 ▼▼▼
             repacked_final_paths = repack_split_images(
                 split_segment_paths,
                 path_split_images_output_dir_current,
                 base_filename=subdir_name,
-                max_size_mb=5  # 上限设置为10MB
+                max_size_mb=5
             )
-            # ▲▲▲ -------------------- ▲▲▲
 
             if repacked_final_paths:
                 dynamic_pdf_filename_for_subdir = subdir_name + ".pdf"
@@ -634,5 +650,5 @@ if __name__ == "__main__":
             print(f"  - {failed_dir}")
     
     print("-" * 70)
-    print(f"最终PDF文件（如有）已保存在: {overall_pdf_output_dir}")
+    print(f"所有成功生成的PDF文件（如有）已保存在: {overall_pdf_output_dir}")
     print("脚本执行完毕。")
