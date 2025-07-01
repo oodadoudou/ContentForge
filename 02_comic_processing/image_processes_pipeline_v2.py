@@ -1,0 +1,654 @@
+import os
+import shutil
+from PIL import Image, ImageFile
+import natsort
+import sys
+from collections import Counter
+import math
+import traceback
+import json
+
+# --- 全局配置 ---
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+Image.MAX_IMAGE_PIXELS = None
+
+MERGED_LONG_IMAGE_SUBDIR_NAME = "merged_long_img"
+SPLIT_IMAGES_SUBDIR_NAME = "split_by_solid_band"
+FINAL_PDFS_SUBDIR_NAME = "merged_pdfs"
+
+LONG_IMAGE_FILENAME_BASE = "stitched_long_strip"
+IMAGE_EXTENSIONS_FOR_MERGE = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif')
+
+MIN_SOLID_COLOR_BAND_HEIGHT = 100
+COLOR_MATCH_TOLERANCE = 30
+
+SPLIT_BAND_COLORS_RGB = [
+    (255, 255, 255), (0, 0, 0)
+]
+
+PDF_TARGET_PAGE_WIDTH_PIXELS = 1500
+PDF_IMAGE_JPEG_QUALITY = 80
+PDF_DPI = 300
+# --- 全局配置结束 ---
+
+
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
+    """在终端打印进度条。"""
+    if total == 0:
+        percent_str = "0.0%"
+        filled_length = 0
+    else:
+        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+        percent_str = f"{percent}%"
+        filled_length = int(length * iteration // total)
+
+    bar = fill * filled_length + '-' * (length - filled_length)
+    sys.stdout.write(f'\r{prefix} |{bar}| {percent_str} {suffix}')
+    sys.stdout.flush()
+    if iteration == total:
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+
+
+def merge_to_long_image(source_image_dir, output_long_image_dir, long_image_filename_only):
+    """将源目录中的所有图片垂直合并成一个PNG长图。"""
+    print(f"\n  --- 步骤 1: 合并 '{os.path.basename(source_image_dir)}' 中的图片成长图 ---")
+    if not os.path.isdir(source_image_dir):
+        print(f"    错误: 源图片目录 '{source_image_dir}' 未找到。")
+        return None
+
+    os.makedirs(output_long_image_dir, exist_ok=True)
+    output_long_image_path = os.path.join(output_long_image_dir, long_image_filename_only)
+
+    try:
+        image_filenames = [
+            f for f in os.listdir(source_image_dir)
+            if os.path.isfile(os.path.join(source_image_dir, f)) and \
+               f.lower().endswith(IMAGE_EXTENSIONS_FOR_MERGE) and \
+               not f.startswith('.')
+        ]
+    except Exception as e:
+        print(f"    错误: 列出目录 '{source_image_dir}' 中的文件失败: {e}")
+        return None
+
+    if not image_filenames:
+        print(f"    在 '{source_image_dir}' 中未找到符合条件的图片。")
+        return None
+
+    sorted_image_filenames = natsort.natsorted(image_filenames)
+    images_data = []
+    total_calculated_height = 0
+    max_calculated_width = 0
+
+    total_files_to_analyze = len(sorted_image_filenames)
+    if total_files_to_analyze > 0:
+        print_progress_bar(0, total_files_to_analyze, prefix='    分析图片尺寸:', suffix='完成', length=40)
+    for i, filename in enumerate(sorted_image_filenames):
+        filepath = os.path.join(source_image_dir, filename)
+        try:
+            with Image.open(filepath) as img:
+                images_data.append({
+                    "path": filepath,
+                    "width": img.width,
+                    "height": img.height
+                })
+                total_calculated_height += img.height
+                if img.width > max_calculated_width:
+                    max_calculated_width = img.width
+        except Exception as e:
+            print(f"\n    警告: 打开或读取图片 '{filename}' 失败: {e}。已跳过。")
+            continue
+        if total_files_to_analyze > 0:
+            print_progress_bar(i + 1, total_files_to_analyze, prefix='    分析图片尺寸:', suffix='完成', length=40)
+
+    if not images_data:
+        print("    没有有效的图片可供合并。")
+        return None
+
+    if max_calculated_width == 0 or total_calculated_height == 0:
+        print(f"    计算得到的画布尺寸为零 ({max_calculated_width}x{total_calculated_height})，无法创建长图。")
+        return None
+
+    merged_canvas = Image.new('RGBA', (max_calculated_width, total_calculated_height), (0, 0, 0, 0))
+    current_y_offset = 0
+
+    total_files_to_paste = len(images_data)
+    if total_files_to_paste > 0:
+        print_progress_bar(0, total_files_to_paste, prefix='    粘贴图片:    ', suffix='完成', length=40)
+    for i, item_info in enumerate(images_data):
+        try:
+            with Image.open(item_info["path"]) as img:
+                img_to_paste = img.convert("RGBA")
+                x_offset = (max_calculated_width - img_to_paste.width) // 2
+                merged_canvas.paste(img_to_paste, (x_offset, current_y_offset), img_to_paste if img_to_paste.mode == 'RGBA' else None)
+                current_y_offset += item_info["height"]
+        except Exception as e:
+            print(f"\n    警告: 粘贴图片 '{item_info['path']}' 失败: {e}。")
+            pass
+        if total_files_to_paste > 0:
+            print_progress_bar(i + 1, total_files_to_paste, prefix='    粘贴图片:    ', suffix='完成', length=40)
+
+    try:
+        merged_canvas.save(output_long_image_path, format='PNG')
+        print(f"    成功合并图片到: {output_long_image_path}")
+        return output_long_image_path
+    except Exception as e:
+        print(f"    错误: 保存合并后的长图失败: {e}")
+        return None
+
+
+def detect_and_add_background_colors(image_path, base_colors_list, sample_height=50, dominance_threshold=0.1, tolerance=15):
+    """分析图片边缘以找到主导背景色，并将其添加到颜色列表中。"""
+    print(f"    ... 正在为 '{os.path.basename(image_path)}' 动态检测背景色 ...")
+    updated_colors = list(base_colors_list)
+    added_colors = []
+
+    try:
+        with Image.open(image_path) as img:
+            img = img.convert("RGB")
+            width, height = img.size
+            
+            if sample_height * 2 > height:
+                sample_height = height // 4
+            
+            if sample_height == 0:
+                print("      图片太短，无法进行背景色采样。")
+                return updated_colors
+
+            top_pixels = list(img.crop((0, 0, width, sample_height)).getdata())
+            bottom_pixels = list(img.crop((0, height - sample_height, width, height)).getdata())
+            edge_pixels = top_pixels + bottom_pixels
+            
+            total_pixels = len(edge_pixels)
+            if total_pixels == 0:
+                print("      未能从图片边缘采集到颜色样本。")
+                return updated_colors
+
+            color_counts = Counter(edge_pixels)
+            
+            for color, count in color_counts.items():
+                if (count / total_pixels) >= dominance_threshold:
+                    is_new_color = True
+                    for existing_color in updated_colors:
+                        if are_colors_close(color, existing_color, tolerance):
+                            is_new_color = False
+                            break
+                    if is_new_color:
+                        updated_colors.append(color)
+                        added_colors.append(color)
+
+    except Exception as e:
+        print(f"      动态背景色检测失败: {e}")
+
+    if added_colors:
+        print(f"      检测到并添加了 {len(added_colors)} 个新的动态背景色: {added_colors}")
+    else:
+        print("      未检测到符合条件的新的主要边缘颜色。")
+
+    return updated_colors
+
+def are_colors_close(color1, color2, tolerance):
+    """根据欧氏距离检查两种RGB颜色是否接近。"""
+    if tolerance == 0:
+        return color1 == color2
+    r1, g1, b1 = color1
+    r2, g2, b2 = color2
+    distance = math.sqrt((r1 - r2)**2 + (g1 - g2)**2 + (b1 - b2)**2)
+    return distance <= tolerance
+
+def is_solid_color_row(pixels, y, width, solid_colors_list, tolerance):
+    """检查给定行是否为纯色带，允许一定的容差。"""
+    if width == 0:
+        return False
+
+    first_pixel_rgb = pixels[0, y][:3]
+    
+    base_color_match = None
+    for base_color in solid_colors_list:
+        if are_colors_close(first_pixel_rgb, base_color, tolerance):
+            base_color_match = first_pixel_rgb
+            break
+            
+    if base_color_match is None:
+        return False
+        
+    for x in range(1, width):
+        if not are_colors_close(pixels[x, y][:3], base_color_match, tolerance):
+            return False
+            
+    return True
+
+def split_long_image(long_image_path, output_split_dir, min_solid_band_height, band_colors_list, tolerance):
+    """基于在足够高的纯色带后找到内容行的原始逻辑来分割长图。"""
+    print(f"\n  --- 步骤 2: 按内容间纯色带分割长图 '{os.path.basename(long_image_path)}' ---")
+    if not os.path.isfile(long_image_path):
+        print(f"    错误: 长图路径 '{long_image_path}' 未找到。")
+        return []
+
+    os.makedirs(output_split_dir, exist_ok=True)
+    split_image_paths = []
+
+    try:
+        if min_solid_band_height < 1: min_solid_band_height = 1
+
+        img = Image.open(long_image_path).convert("RGBA")
+        pixels = img.load()
+        img_width, img_height = img.size
+
+        if img_height == 0 or img_width == 0:
+            print(f"    图片 '{os.path.basename(long_image_path)}' 尺寸为零，无法分割。")
+            return []
+
+        original_basename, _ = os.path.splitext(os.path.basename(long_image_path))
+        part_index = 1
+        current_segment_start_y = 0
+        solid_band_after_last_content_start_y = -1
+
+        print_progress_bar(0, img_height, prefix='    扫描长图:  ', suffix='完成', length=40)
+
+        for y in range(img_height):
+            print_progress_bar(y + 1, img_height, prefix='    扫描长图:  ', suffix=f'{y+1}/{img_height} 行', length=40)
+
+            is_solid = is_solid_color_row(pixels, y, img_width, band_colors_list, tolerance)
+
+            if not is_solid: # 这是一个 "内容" 行
+                if solid_band_after_last_content_start_y != -1:
+                    solid_band_height = y - solid_band_after_last_content_start_y
+                    if solid_band_height >= min_solid_band_height:
+                        cut_point_y = solid_band_after_last_content_start_y + (solid_band_height // 2)
+                        if cut_point_y > current_segment_start_y:
+                            segment = img.crop((0, current_segment_start_y, img_width, cut_point_y))
+                            output_filename = f"{original_basename}_split_part_{part_index}.png"
+                            output_filepath = os.path.join(output_split_dir, output_filename)
+                            try:
+                                segment.save(output_filepath, "PNG")
+                                split_image_paths.append(output_filepath)
+                                part_index += 1
+                            except Exception as e_save:
+                                print(f"      保存分割片段 '{output_filename}' 失败: {e_save}")
+                        current_segment_start_y = cut_point_y
+                solid_band_after_last_content_start_y = -1
+            else: # 这是一个 "纯色" 行
+                if solid_band_after_last_content_start_y == -1:
+                    solid_band_after_last_content_start_y = y
+
+        if current_segment_start_y < img_height:
+            segment = img.crop((0, current_segment_start_y, img_width, img_height))
+            if segment.height > 10:
+                output_filename = f"{original_basename}_split_part_{part_index}.png"
+                output_filepath = os.path.join(output_split_dir, output_filename)
+                try:
+                    segment.save(output_filepath, "PNG")
+                    split_image_paths.append(output_filepath)
+                except Exception as e_save:
+                     print(f"      保存最后一个分割片段 '{output_filename}' 失败: {e_save}")
+
+        if not split_image_paths and img_height > 0:
+            print(f"    未能从 '{os.path.basename(long_image_path)}' 按指定的纯色带分割。")
+            print(f"    将使用原始合并长图进行下一步。")
+            shutil.copy2(long_image_path, os.path.join(output_split_dir, os.path.basename(long_image_path)))
+            return [os.path.join(output_split_dir, os.path.basename(long_image_path))]
+
+    except Exception as e:
+        print(f"    分割图片 '{os.path.basename(long_image_path)}' 时发生错误: {e}")
+        traceback.print_exc()
+
+    return natsort.natsorted(split_image_paths)
+
+
+def _merge_image_list_for_repack(image_paths, output_path):
+    """一个专门用于重打包的内部合并函数。"""
+    if not image_paths:
+        return False
+    
+    images_data = []
+    total_height = 0
+    max_width = 0
+    for path in image_paths:
+        try:
+            with Image.open(path) as img:
+                images_data.append({"path": path, "width": img.width, "height": img.height})
+                total_height += img.height
+                if img.width > max_width:
+                    max_width = img.width
+        except Exception:
+            continue
+            
+    if not images_data: return False
+
+    merged_canvas = Image.new('RGBA', (max_width, total_height))
+    current_y = 0
+    for item in images_data:
+        with Image.open(item["path"]) as img:
+            img_to_paste = img.convert("RGBA")
+            x_offset = (max_width - item["width"]) // 2
+            merged_canvas.paste(img_to_paste, (x_offset, current_y), img_to_paste)
+            current_y += item["height"]
+            
+    merged_canvas.save(output_path, "PNG")
+    return True
+
+
+def repack_split_images(split_image_paths, output_dir, base_filename, max_size_mb=5):
+    """
+    将分割后的图片按大小重新打包合并。
+    - 合并后的图片块上限为 max_size_mb。
+    - 如果单张图片已超过上限，则直接保留，不参与合并。
+    """
+    print(f"\n  --- 步骤 2.5: 重打包图片块 (上限: {max_size_mb}MB) ---")
+    if not split_image_paths:
+        print("    没有可供重打包的图片。")
+        return []
+
+    max_size_bytes = max_size_mb * 1024 * 1024
+    
+    repacked_paths = []
+    current_bucket = []
+    current_bucket_size = 0
+    repack_index = 1
+    
+    total_files = len(split_image_paths)
+    print_progress_bar(0, total_files, prefix='    处理图片块:', suffix='开始', length=40)
+
+    for i, img_path in enumerate(split_image_paths):
+        if not os.path.exists(img_path): continue
+        
+        file_size = os.path.getsize(img_path)
+        
+        # 特殊情况: 单个文件已经超过上限
+        if file_size > max_size_bytes:
+            # 1. 如果当前桶内有待处理的图片，先将它们打包
+            if current_bucket:
+                output_filename = f"{base_filename}_repacked_{repack_index}.png"
+                output_path = os.path.join(output_dir, output_filename)
+                if _merge_image_list_for_repack(current_bucket, output_path):
+                    repacked_paths.append(output_path)
+                    repack_index += 1
+                current_bucket = []
+                current_bucket_size = 0
+            
+            # 2. 直接复制这个过大的文件
+            output_filename_oversized = f"{base_filename}_repacked_{repack_index}.png"
+            output_path_oversized = os.path.join(output_dir, output_filename_oversized)
+            shutil.copy2(img_path, output_path_oversized)
+            repacked_paths.append(output_path_oversized)
+            repack_index += 1
+            print_progress_bar(i + 1, total_files, prefix='    处理图片块:', suffix=f'完成 {repack_index-1} 个包', length=40)
+            continue # 处理下一个文件
+
+        # 常规情况: 文件大小在限制内
+        # 如果将当前文件加入桶中会超出上限
+        if current_bucket and (current_bucket_size + file_size) > max_size_bytes:
+            # 先打包当前的桶
+            output_filename = f"{base_filename}_repacked_{repack_index}.png"
+            output_path = os.path.join(output_dir, output_filename)
+            if _merge_image_list_for_repack(current_bucket, output_path):
+                repacked_paths.append(output_path)
+                repack_index += 1
+            
+            # 用当前文件开始一个新的桶
+            current_bucket = [img_path]
+            current_bucket_size = file_size
+        else:
+            # 桶还有空间，加入当前文件
+            current_bucket.append(img_path)
+            current_bucket_size += file_size
+        
+        print_progress_bar(i + 1, total_files, prefix='    处理图片块:', suffix=f'完成 {repack_index-1} 个包', length=40)
+
+    # 处理循环结束后所有剩余在桶中的图片
+    if current_bucket:
+        output_filename = f"{base_filename}_repacked_{repack_index}.png"
+        output_path = os.path.join(output_dir, output_filename)
+        if _merge_image_list_for_repack(current_bucket, output_path):
+            repacked_paths.append(output_path)
+    
+    print_progress_bar(total_files, total_files, prefix='    处理图片块:', suffix='全部完成', length=40)
+    print(f"    重打包完成，共生成 {len(repacked_paths)} 个新的图片块。")
+
+    # 清理掉原始的、未打包的分割图片
+    print("    ... 正在清理原始分割文件 ...")
+    for path in split_image_paths:
+        try:
+            os.remove(path)
+        except OSError as e:
+            print(f"      无法删除原始文件 {os.path.basename(path)}: {e}")
+
+    return natsort.natsorted(repacked_paths)
+
+def create_pdf_from_images(image_paths_list, output_pdf_dir, pdf_filename_only,
+                           target_page_width_px, image_jpeg_quality, pdf_target_dpi):
+    """从图片片段列表创建PDF文件。"""
+    print(f"\n  --- 步骤 3: 从图片片段创建 PDF '{pdf_filename_only}' ---")
+    if not image_paths_list:
+        print("    没有图片片段可用于创建 PDF。")
+        return None
+
+    os.makedirs(output_pdf_dir, exist_ok=True)
+    pdf_full_path = os.path.join(output_pdf_dir, pdf_filename_only)
+    
+    processed_pil_images = []
+    
+    total_images_for_pdf = len(image_paths_list)
+    if total_images_for_pdf > 0:
+        print_progress_bar(0, total_images_for_pdf, prefix='    处理PDF图片:', suffix='完成', length=40)
+
+    for i, image_path in enumerate(image_paths_list):
+        try:
+            with Image.open(image_path) as img:
+                img_to_process = img
+                if img_to_process.mode not in ['RGB', 'L']:
+                    background = Image.new("RGB", img_to_process.size, (255, 255, 255))
+                    try:
+                        mask = img_to_process.getchannel('A')
+                        background.paste(img_to_process, mask=mask)
+                    except (ValueError, KeyError):
+                        background.paste(img_to_process.convert("RGB"))
+                    img_to_process = background
+                elif img_to_process.mode == 'L':
+                    img_to_process = img_to_process.convert('RGB')
+
+                original_width, original_height = img_to_process.size
+                if original_width == 0 or original_height == 0:
+                    print(f"    警告: 图片 '{os.path.basename(image_path)}' 尺寸为零，已跳过。")
+                    if total_images_for_pdf > 0: print_progress_bar(i + 1, total_images_for_pdf, prefix='    处理PDF图片:', suffix='完成', length=40)
+                    continue
+                
+                if original_width > target_page_width_px:
+                    ratio = target_page_width_px / original_width
+                    new_height = int(original_height * ratio)
+                    if new_height <=0: new_height = 1
+                    img_resized = img_to_process.resize((target_page_width_px, new_height), Image.Resampling.LANCZOS)
+                else:
+                    img_resized = img_to_process.copy()
+
+                processed_pil_images.append(img_resized)
+
+        except Exception as e:
+            print(f"\n    警告: 处理PDF图片 '{os.path.basename(image_path)}' 失败: {e}。已跳过。")
+            pass
+        if total_images_for_pdf > 0:
+            print_progress_bar(i + 1, total_images_for_pdf, prefix='    处理PDF图片:', suffix='完成', length=40)
+
+    if not processed_pil_images:
+        print("    没有图片成功处理以包含在PDF中。")
+        return None
+
+    try:
+        first_image_to_save = processed_pil_images[0]
+        images_to_append = processed_pil_images[1:]
+
+        first_image_to_save.save(
+            pdf_full_path,
+            save_all=True,
+            append_images=images_to_append,
+            resolution=float(pdf_target_dpi),
+            quality=image_jpeg_quality,
+            optimize=True
+        )
+        print(f"    成功创建 PDF: {pdf_full_path}")
+        return pdf_full_path
+    except Exception as e:
+        print(f"    保存 PDF 失败: {e}")
+        return None
+    finally:
+        for img_obj in processed_pil_images:
+            try:
+                img_obj.close()
+            except Exception:
+                pass
+
+
+def cleanup_intermediate_dirs(long_img_dir, split_img_dir):
+    """清理指定的中间文件目录。"""
+    print(f"\n  --- 步骤 4: 清理中间文件 ---")
+    for dir_to_remove, dir_name_for_log in [(long_img_dir, "长图合并"), (split_img_dir, "图片分割与打包")]:
+        if os.path.isdir(dir_to_remove):
+            try:
+                shutil.rmtree(dir_to_remove)
+                print(f"    已删除中间 {dir_name_for_log} 文件夹: {dir_to_remove}")
+            except Exception as e:
+                print(f"    删除文件夹 '{dir_to_remove}' 失败: {e}")
+
+# ▼▼▼ 主程式區塊已修改 ▼▼▼
+if __name__ == "__main__":
+    print("自动化图片批量处理流程脚本启动！ (V3.2 - 更新打包逻辑)")
+    print("功能：1.合并 -> 2.分割 -> 2.5.重打包 -> 3.创建PDF -> 4.清理")
+    print("-" * 70)
+    
+    # --- 新增：動態讀取設定檔以獲取預設路徑 ---
+    def load_default_path_from_settings():
+        """從共享設定檔中讀取預設工作目錄。"""
+        try:
+            # 向上兩層找到專案根目錄，再定位到 settings.json
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+            # 如果 default_work_dir 為空或 None，也視為無效
+            default_dir = settings.get("default_work_dir")
+            return default_dir if default_dir else "."
+        except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+            print(f"警告：讀取 settings.json 失敗 ({e})，將使用內建備用路徑。")
+            # 在無法讀取設定檔時，提供一個通用的備用路徑
+            return os.path.join(os.path.expanduser("~"), "Downloads")
+    
+    default_root_dir_name = load_default_path_from_settings()
+    # --- 修改結束 ---
+
+    root_input_dir = ""
+    while True:
+        prompt_message = (
+            f"请输入包含多个一级子文件夹的【根目录】路径。\n"
+            f"(直接按 Enter 键，将使用默认路径 '{default_root_dir_name}'): "
+        )
+        user_provided_path = input(prompt_message).strip()
+        current_path_to_check = user_provided_path if user_provided_path else default_root_dir_name
+        if not user_provided_path:
+            print(f"使用默认路径: {current_path_to_check}")
+
+        abs_path_to_check = os.path.abspath(current_path_to_check)
+        if os.path.isdir(abs_path_to_check):
+            root_input_dir = abs_path_to_check
+            print(f"已选定根处理目录: {root_input_dir}")
+            break
+        else:
+            print(f"错误：路径 '{abs_path_to_check}' 不是一个有效的目录或不存在。")
+
+    overall_pdf_output_dir = os.path.join(root_input_dir, FINAL_PDFS_SUBDIR_NAME)
+    os.makedirs(overall_pdf_output_dir, exist_ok=True)
+
+    subdirectories = [d for d in os.listdir(root_input_dir)
+                      if os.path.isdir(os.path.join(root_input_dir, d)) and \
+                         d not in [MERGED_LONG_IMAGE_SUBDIR_NAME, SPLIT_IMAGES_SUBDIR_NAME, FINAL_PDFS_SUBDIR_NAME] and \
+                         not d.startswith('.')]
+
+    if not subdirectories:
+        print(f"\n在根目录 '{root_input_dir}' 下没有找到可处理的一级子文件夹。")
+        sys.exit()
+
+    sorted_subdirectories = natsort.natsorted(subdirectories)
+    print(f"\n将按顺序处理以下 {len(sorted_subdirectories)} 个子文件夹: {', '.join(sorted_subdirectories)}")
+
+    total_subdirs_to_process = len(sorted_subdirectories)
+    failed_subdirs_list = []
+
+    for i, subdir_name in enumerate(sorted_subdirectories):
+        print_progress_bar(i, total_subdirs_to_process, prefix="总进度:", suffix=f'{subdir_name}', length=40)
+        print(f"\n\n{'='*10} 开始处理子文件夹: {subdir_name} ({i+1}/{total_subdirs_to_process}) {'='*10}")
+        
+        current_processing_subdir = os.path.join(root_input_dir, subdir_name)
+
+        path_long_image_output_dir_current = os.path.join(current_processing_subdir, MERGED_LONG_IMAGE_SUBDIR_NAME)
+        path_split_images_output_dir_current = os.path.join(current_processing_subdir, SPLIT_IMAGES_SUBDIR_NAME)
+        current_long_image_filename = f"{subdir_name}_{LONG_IMAGE_FILENAME_BASE}.png"
+
+        created_long_image_path = merge_to_long_image(
+            current_processing_subdir,
+            path_long_image_output_dir_current,
+            current_long_image_filename
+        )
+
+        pdf_created_for_this_subdir = False
+        if created_long_image_path:
+            dynamic_band_colors = detect_and_add_background_colors(
+                created_long_image_path,
+                SPLIT_BAND_COLORS_RGB,
+                tolerance=COLOR_MATCH_TOLERANCE
+            )
+
+            split_segment_paths = split_long_image(
+                created_long_image_path,
+                path_split_images_output_dir_current,
+                MIN_SOLID_COLOR_BAND_HEIGHT,
+                dynamic_band_colors,
+                COLOR_MATCH_TOLERANCE
+            )
+
+            repacked_final_paths = repack_split_images(
+                split_segment_paths,
+                path_split_images_output_dir_current,
+                base_filename=subdir_name,
+                max_size_mb=5
+            )
+
+            if repacked_final_paths:
+                dynamic_pdf_filename_for_subdir = subdir_name + ".pdf"
+                created_pdf_path = create_pdf_from_images(
+                    repacked_final_paths,
+                    overall_pdf_output_dir,
+                    dynamic_pdf_filename_for_subdir,
+                    PDF_TARGET_PAGE_WIDTH_PIXELS,
+                    PDF_IMAGE_JPEG_QUALITY,
+                    PDF_DPI
+                )
+                if created_pdf_path:
+                    pdf_created_for_this_subdir = True
+
+        if pdf_created_for_this_subdir:
+            cleanup_intermediate_dirs(path_long_image_output_dir_current, path_split_images_output_dir_current)
+        else:
+            print(f"  子文件夹 '{subdir_name}' 未能成功生成PDF，将保留中间文件。")
+            failed_subdirs_list.append(subdir_name)
+
+        print(f"{'='*10} 子文件夹 '{subdir_name}' 处理完毕 {'='*10}")
+        print_progress_bar(i + 1, total_subdirs_to_process, prefix="总进度:", suffix='完成', length=40)
+
+    print("\n" + "=" * 70)
+    print("【任务总结报告】")
+    print("-" * 70)
+    
+    success_count = total_subdirs_to_process - len(failed_subdirs_list)
+    
+    print(f"总计处理项目 (子文件夹): {total_subdirs_to_process} 个")
+    print(f"  - ✅ 成功: {success_count} 个")
+    print(f"  - ❌ 失败: {len(failed_subdirs_list)} 个")
+    
+    if failed_subdirs_list:
+        print("\n失败项目列表:")
+        for failed_dir in failed_subdirs_list:
+            print(f"  - {failed_dir}")
+    
+    print("-" * 70)
+    print(f"所有成功生成的PDF文件（如有）已保存在: {overall_pdf_output_dir}")
+    print("脚本执行完毕。")
