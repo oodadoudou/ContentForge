@@ -7,15 +7,13 @@ import shutil
 import re
 from pypinyin import pinyin, Style
 
-# --- 全局配置 ---
-# --- API 配置 ---
-API_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
-API_BEARER_TOKEN = "在此处填入您的API_KEY"
-API_MODEL = "doubao-seed-1-6-thinking-250615"
+# --- 全局配置 (將由設定檔覆蓋) ---
+API_URL = ""
+API_BEARER_TOKEN = ""
+API_MODEL = ""
 
 # --- AI 翻译提示词 ---
 SYSTEM_PROMPT = "你是一个专业的小说翻译."
-# 核心翻译逻辑已部分移至代码中处理（如符号替换），提示词保持核心要求。
 TRANSLATION_PROMPT_TEMPLATE = """
 核心目标： 将韩语或日语小说标题精准、流畅、且富有情感地翻译为简体中文，为读者提供沉浸式的阅读体验。
 一、 格式与结构规则
@@ -35,9 +33,6 @@ TRANSLATION_PROMPT_TEMPLATE = """
 除上述规则中需要舍弃的符号外，原文的所有内容均需完整翻译。
 这包括但不限于：拟声词 (의성어)、拟态词 (의태어)、语气助词、感叹词以及所有专有名词（如角色名、技能名、地名等）。
 
-准确性 (Accuracy):
-译文必须忠实于原文的中心思想和具体含义，避免出现语义偏差、增译或漏译。
-
 流畅性 (Fluency):
 译文必须行文流畅，符合现代简体中文的口语化表达习惯。
 力求文字自然地道，读起来通顺易懂，坚决杜绝生硬的“翻译腔”。
@@ -49,10 +44,8 @@ TRANSLATION_PROMPT_TEMPLATE = """
 """
 
 # --- 文件整理器 (File Organizer) 配置 ---
-# file_organizer 将处理这些扩展名的文件，将它们放入子文件夹
 ORGANIZER_TARGET_EXTENSIONS = ".pdf .epub .txt .jpg .jpeg .png .gif .bmp .tiff .webp .zip .rar .7z .tar .gz"
 
-# --- 进度条函数 ---
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
     if total == 0:
         percent_str, filled_length = "0.0%", 0
@@ -65,6 +58,30 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     if iteration == total:
         sys.stdout.write('\n')
         sys.stdout.flush()
+
+# --- 新增：从 settings.json 加载配置的函数 ---
+def load_settings_from_json():
+    """从共享设置文件中读取所有配置并更新全局变量。"""
+    global API_URL, API_BEARER_TOKEN, API_MODEL
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        
+        # 加载 AI 配置
+        ai_config = settings.get("ai_config", {})
+        API_URL = ai_config.get("base_url", "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+        API_BEARER_TOKEN = ai_config.get("api_key", "")
+        API_MODEL = ai_config.get("model_name", "doubao-pro-32k")
+        
+        # 返回默认工作目录
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else os.path.join(os.path.expanduser("~"), "Downloads")
+
+    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+        print(f"警告：读取 settings.json 失败 ({e})，将使用内置的备用值。")
+        return os.path.join(os.path.expanduser("~"), "Downloads")
 
 # ==============================================================================
 # 模块 1: 文件整理 (File Organizer)
@@ -170,19 +187,29 @@ def translate_names_via_api(root_directory: str, original_names: list) -> list:
     """逐个调用AI API翻译文件夹名称列表，并将结果保存到list-zh.txt。"""
     print(f"\n--- 步骤 2: 发送至AI进行翻译并生成 list-zh.txt ---")
     if not original_names: return []
+    if not API_BEARER_TOKEN:
+        print("    错误：API Key 未在 settings.json 中配置。跳过翻译步骤。")
+        return original_names
+
     translated_names = []
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {API_BEARER_TOKEN}"}
+    headers = {"Authorization": f"Bearer {API_BEARER_TOKEN}"}
     total_names = len(original_names)
     print_progress_bar(0, total_names, prefix='    翻译进度:', suffix='完成', length=40)
     for i, original_name in enumerate(original_names):
-        # 【修改】在翻译前，先将特定符号替换为空格，以确保翻译的准确性
         name_to_translate = original_name.replace('+', ' ').replace('_', ' ').strip()
         if original_name != name_to_translate:
             print(f"\n    预处理: '{original_name}' -> '{name_to_translate}'")
             
-        data = { "model": API_MODEL, "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": TRANSLATION_PROMPT_TEMPLATE.format(name_to_translate)}]}
+        payload = {
+            "model": API_MODEL,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": TRANSLATION_PROMPT_TEMPLATE.format(name_to_translate)}
+            ]
+        }
         try:
-            response = requests.post(API_URL, headers=headers, data=json.dumps(data), timeout=60)
+            # --- BUG修复：使用 json 参数让 requests 自动处理编码 ---
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
             response.raise_for_status()
             response_json = response.json()
             translated_text = response_json['choices'][0]['message']['content'].strip()
@@ -190,12 +217,12 @@ def translate_names_via_api(root_directory: str, original_names: list) -> list:
             translated_names.append(final_translation)
         except Exception as e:
             print(f"\n    翻译 '{name_to_translate}' 失败: {e}。将使用原始名称作为占位符。")
-            translated_names.append(original_name) # 出错时保留原始名称
+            translated_names.append(original_name)
             
         print_progress_bar(i + 1, total_names, prefix='    翻译进度:', suffix='完成', length=40)
         time.sleep(0.5)
         
-    print("    所有名称翻译尝试完毕。")
+    print("\n    所有名称翻译尝试完毕。")
     with open(os.path.join(root_directory, "list-zh.txt"), 'w', encoding='utf-8') as f:
         for name in translated_names: f.write(name + '\n')
     print(f"    成功将翻译结果写入到: {os.path.join(root_directory, 'list-zh.txt')}")
@@ -211,10 +238,9 @@ def rename_dirs_to_chinese(root_directory: str, original_names: list, translated
     successful_renames = []
     for original_name, new_name in zip(original_names, translated_names):
         original_path = os.path.join(root_directory, original_name)
-        # 如果翻译失败，new_name可能等于original_name，此时跳过重命名
         if original_name == new_name:
             print(f"    跳过: 翻译结果与原名相同 '{original_name}'")
-            successful_renames.append(original_name) # 仍然需要将其加入列表以进行后续拼音处理
+            successful_renames.append(original_name)
             continue
 
         invalid_chars = r'[\\/*?:"<>|]'
@@ -231,7 +257,7 @@ def rename_dirs_to_chinese(root_directory: str, original_names: list, translated
                     print(f"    失败: 重命名 '{original_name}' 时发生错误: {e}")
             else:
                 print(f"    跳过: 目标名称 '{cleaned_new_name}' 已存在。")
-                successful_renames.append(cleaned_new_name) # 目标已存在，也视为已处理
+                successful_renames.append(cleaned_new_name)
         else:
             print(f"    跳过: 找不到原始文件夹 '{original_path}'。")
 
@@ -254,15 +280,14 @@ def add_pinyin_prefix_to_dirs(root_directory: str, dir_names: list) -> list:
     
     print_progress_bar(0, len(dir_names), prefix='    添加前缀进度:', suffix='完成', length=40)
     for i, original_name in enumerate(dir_names):
-        # 检查是否已经有前缀了
         if re.match(r'^[A-Z]-', original_name):
-            print(f"    跳过: '{original_name}' 已有前缀。")
+            print(f"\n    跳过: '{original_name}' 已有前缀。")
             final_names.append(original_name)
             continue
 
         first_char_match = re.search(r'([\u4e00-\u9fff]|[A-Za-z])', original_name)
         if not first_char_match:
-            print(f"    警告: 无法为 '{original_name}' 确定首字母，跳过。")
+            print(f"\n    警告: 无法为 '{original_name}' 确定首字母，跳过。")
             final_names.append(original_name)
             error_count += 1
             continue
@@ -275,8 +300,8 @@ def add_pinyin_prefix_to_dirs(root_directory: str, dir_names: list) -> list:
             elif 'a' <= first_char.lower() <= 'z':
                 prefix = first_char.upper()
         except Exception as e:
-            print(f"    生成前缀失败 for '{original_name}': {e}")
-            prefix = 'X' # Fallback prefix
+            print(f"\n    生成前缀失败 for '{original_name}': {e}")
+            prefix = 'X'
         
         if prefix:
             new_name_with_prefix = f"{prefix}-{original_name}"
@@ -287,15 +312,15 @@ def add_pinyin_prefix_to_dirs(root_directory: str, dir_names: list) -> list:
                 if not os.path.exists(new_path):
                     try:
                         os.rename(original_path, new_path)
-                        print(f"    成功: '{original_name}' -> '{new_name_with_prefix}'")
+                        print(f"\n    成功: '{original_name}' -> '{new_name_with_prefix}'")
                         renamed_count += 1
                         final_names.append(new_name_with_prefix)
                     except Exception as e:
-                        print(f"    失败: 重命名 '{original_name}' 添加前缀时出错: {e}")
+                        print(f"\n    失败: 重命名 '{original_name}' 添加前缀时出错: {e}")
                         error_count += 1
                         final_names.append(original_name)
                 else:
-                    print(f"    跳过: 带前缀的名称 '{new_name_with_prefix}' 已存在。")
+                    print(f"\n    跳过: 带前缀的名称 '{new_name_with_prefix}' 已存在。")
                     final_names.append(new_name_with_prefix)
             else:
                  final_names.append(original_name)
@@ -304,8 +329,26 @@ def add_pinyin_prefix_to_dirs(root_directory: str, dir_names: list) -> list:
         
         print_progress_bar(i + 1, len(dir_names), prefix='    添加前缀进度:', suffix='完成', length=40)
 
-    print(f"    前缀添加完成。成功: {renamed_count}, 失败/跳过: {error_count}")
+    print(f"\n    前缀添加完成。成功: {renamed_count}, 失败/跳过: {error_count}")
     return final_names
+
+# ==============================================================================
+# 新增模块 4: 清理临时文件
+# ==============================================================================
+def cleanup_temp_files(root_directory: str):
+    """清理过程中生成的临时 list.txt 和 list-zh.txt 文件。"""
+    print(f"\n--- 步骤 5: 清理临时文件 ---")
+    files_to_delete = ["list.txt", "list-zh.txt"]
+    for filename in files_to_delete:
+        file_path = os.path.join(root_directory, filename)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                print(f"    已删除临时文件: {filename}")
+            except OSError as e:
+                print(f"    删除临时文件 '{filename}' 失败: {e}")
+        else:
+            print(f"    临时文件未找到，无需删除: {filename}")
 
 # ==============================================================================
 # 主执行流程
@@ -314,17 +357,15 @@ if __name__ == "__main__":
     print("文件整理、翻译及重命名流水线脚本")
     print("-" * 50)
 
-    # 【修改】添加默认路径并优化用户输入体验
-    default_path = "/Users/doudouda/Downloads/2/"
+    # --- 修改：动态加载所有配置 ---
+    default_path = load_settings_from_json()
     
     try:
         target_directory_input = input(f"请输入【根目录】路径 (默认: {default_path})，然后按 Enter: ").strip()
         
+        target_directory = target_directory_input if target_directory_input else default_path
         if not target_directory_input:
-            target_directory = default_path
             print(f"    使用默认路径: {target_directory}")
-        else:
-            target_directory = target_directory_input
 
         while not os.path.isdir(target_directory):
             print(f"错误: '{target_directory}' 不是一个有效的目录路径。")
@@ -338,23 +379,17 @@ if __name__ == "__main__":
         print("\n操作被用户中断。脚本退出。")
         sys.exit()
 
-
-    # --- 执行预处理步骤：整理文件 ---
     organize_files_into_subdirs(target_directory)
-
-    # --- 执行步骤1：提取文件夹名称 ---
     original_folders = extract_folder_names_to_file(target_directory)
 
     if original_folders:
-        # --- 执行步骤2：翻译文件夹名称 ---
         translated_folders = translate_names_via_api(target_directory, original_folders)
-
         if translated_folders and len(original_folders) == len(translated_folders):
-            # --- 执行步骤3：重命名为中文 ---
             renamed_to_chinese_folders = rename_dirs_to_chinese(target_directory, original_folders, translated_folders)
-            
             if renamed_to_chinese_folders:
-                # --- 执行步骤4：添加拼音前缀 ---
                 add_pinyin_prefix_to_dirs(target_directory, renamed_to_chinese_folders)
+
+    # --- 新增：调用清理函数 ---
+    cleanup_temp_files(target_directory)
 
     print("\n所有流程执行完毕。")

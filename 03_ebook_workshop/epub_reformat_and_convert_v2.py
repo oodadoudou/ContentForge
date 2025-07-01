@@ -4,6 +4,7 @@ import zipfile
 import tempfile
 import re
 from xml.etree import ElementTree as ET
+import json
 
 # 导入 OpenCC 模块，如果失败则提供清晰的安装指引
 try:
@@ -39,38 +40,33 @@ def check_epub_needs_processing(epub_path, cc):
                 needs_layout_change = True
             
             # --- START: 优化后的繁简内容检测逻辑 ---
-            # 参考 epub_convert_tc_to_sc.py 的 check_if_translation_needed 函数
-            # 遍历内容文件进行抽样检查，比之前只检查第一个文件更可靠
             for root_dir, _, files in os.walk(temp_dir):
                 content_files = [f for f in files if f.endswith(('.xhtml', '.html', '.opf'))]
                 if not content_files:
                     continue
                 
-                # 遍历目录中所有可能包含繁体字的文件
                 for filename in content_files:
                     sample_file_path = os.path.join(root_dir, filename)
                     sample_text = ""
                     try:
-                        # 增加更安全的编码处理
                         with open(sample_file_path, 'r', encoding='utf-8') as f:
-                            sample_text = f.read(2048) # 读取 2KB 样本
+                            sample_text = f.read(2048)
                     except UnicodeDecodeError:
                         try:
                             with open(sample_file_path, 'r', encoding='gbk', errors='ignore') as f:
                                 sample_text = f.read(2048)
                         except Exception:
-                            continue # 如果两种编码都读取失败，则跳过此文件
+                            continue
                     
                     if sample_text and sample_text != cc.convert(sample_text):
                         needs_char_conversion = True
-                        break # 找到一个需要转换的文件就足够了
+                        break
                 
                 if needs_char_conversion:
-                    break # 已确认需要转换，无需再检查其他目录
+                    break
             # --- END: 优化后的繁简内容检测逻辑 ---
 
     except Exception:
-        # 如果文件解析失败，则当作不需要处理
         return False, False
 
     return needs_layout_change, needs_char_conversion
@@ -101,21 +97,15 @@ def modify_opf_file(opf_path, cc, do_layout, do_chars):
                 spine.set('page-progression-direction', 'ltr')
                 print("  - [格式] 页面翻页方向 -> 'ltr'.")
 
-        # --- START: 优化后的元数据转换逻辑 ---
-        # 参考 epub_convert_tc_to_sc.py 的做法，转换所有元数据而不仅是标题
         if do_chars:
             metadata = root.find('opf:metadata', ns)
             if metadata is not None:
-                # 遍历元数据中的所有节点
                 for elem in metadata.iter():
-                    # 转换节点的文本内容
                     if elem.text and elem.text.strip():
                         elem.text = cc.convert(elem.text)
-                    # 转换节点的尾部文本 (通常是同一行内的混合内容)
                     if elem.tail and elem.tail.strip():
                         elem.tail = cc.convert(elem.tail)
                 print("  - [文字] 书籍元数据 -> 简体。")
-        # --- END: 优化后的元数据转换逻辑 ---
 
         if sys.version_info >= (3, 9):
             ET.indent(tree)
@@ -132,7 +122,6 @@ def modify_content_files(temp_dir, cc, do_layout, do_chars):
 
             file_path = os.path.join(root_dir, filename)
             try:
-                # 增加更安全的编码处理
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
@@ -165,7 +154,6 @@ def repack_epub(temp_dir, new_epub_path):
     try:
         mimetype_path = os.path.join(temp_dir, 'mimetype')
         with zipfile.ZipFile(new_epub_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            # 确保 mimetype 文件是第一个且未压缩
             zf.write(mimetype_path, 'mimetype', compress_type=zipfile.ZIP_STORED)
             for root_dir, _, files in os.walk(temp_dir):
                 for filename in files:
@@ -212,7 +200,6 @@ def process_txt_file(txt_path, output_dir, cc):
     """处理单个TXT文件，仅进行繁简转换。"""
     print(f"\n[处理TXT] {os.path.basename(txt_path)}")
     try:
-        # 增加更安全的编码处理
         try:
             with open(txt_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -237,15 +224,12 @@ def process_txt_file(txt_path, output_dir, cc):
 def initialize_opencc():
     """初始化OpenCC转换器，包含健壮的后备方案。"""
     try:
-        # 优先尝试标准初始化方法，传入不带 .json 的文件名
         return OpenCC('t2s')
     except Exception as e_simple:
         print("[警告] 标准 OpenCC 初始化失败，尝试使用后备方案...")
         try:
-            # 后备方案：手动查找配置文件的绝对路径
             package_path = opencc_module.__path__[0]
             
-            # 尝试在几个常见位置查找配置文件
             possible_paths = [
                 os.path.join(package_path, 'data', 'config', 't2s.json'),
                 os.path.join(package_path, 'config', 't2s.json'),
@@ -272,12 +256,26 @@ def initialize_opencc():
             print("\n请尝试彻底卸载并重新安装库: pip uninstall opencc-python-reimplemented -y && pip install opencc-python-reimplemented", file=sys.stderr)
             sys.exit(1)
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
 def main():
     """脚本主入口。"""
     cc = initialize_opencc()
     print("[信息] OpenCC 初始化成功。")
 
-    default_path = "/Users/doudouda/Downloads/2/"
+    # --- 修改：动态加载默认路径 ---
+    default_path = load_default_path_from_settings()
     prompt_message = f"请输入目标根目录 (直接按回车将使用: {default_path}): "
     target_directory = input(prompt_message).strip() or default_path
 
@@ -285,7 +283,6 @@ def main():
         print(f"错误: 目录 '{target_directory}' 不存在或无效。", file=sys.stderr)
         sys.exit(1)
         
-    # 创建统一的输出文件夹
     output_dir = os.path.join(target_directory, "processed_files")
     os.makedirs(output_dir, exist_ok=True)
     
@@ -293,7 +290,6 @@ def main():
     print(f"[*] 所有处理后的文件将被保存到: {output_dir}")
     
     for root, _, files in os.walk(target_directory):
-        # 避免扫描输出目录本身
         if os.path.abspath(root).startswith(os.path.abspath(output_dir)):
             continue
 

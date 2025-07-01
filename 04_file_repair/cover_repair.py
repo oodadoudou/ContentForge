@@ -4,6 +4,7 @@ import zipfile
 import tempfile
 import re
 from xml.etree import ElementTree as ET
+import json
 
 def find_opf_file(unzip_dir):
     """在解压目录中找到 .opf 文件。"""
@@ -168,9 +169,23 @@ def fix_cover(epub_path, output_dir):
         except Exception as e:
             print(f"  - [严重错误] 处理过程中发生意外: {e}")
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
 def main():
     """脚本主入口"""
-    default_path = "/Users/doudouda/Downloads/2/"
+    # --- 修改：动态加载默认路径 ---
+    default_path = load_default_path_from_settings()
     prompt_message = f"请输入需要修复封面的EPUB文件所在目录 (直接按回车将使用: {default_path}): "
     target_directory = input(prompt_message).strip() or default_path
 

@@ -3,6 +3,7 @@ import sys
 import zipfile
 import shutil
 import tempfile
+import json
 
 # --- 配置 ---
 NEW_CSS_FILENAME = "new_style.css"
@@ -117,25 +118,35 @@ def process_epub_directory(root_dir):
     print("\n--- 处理完毕 ---")
     print(f"总计: {len(epub_files)} 个文件 | 成功: {success_count} 个 | 失败: {fail_count} 个")
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
 
 if __name__ == "__main__":
-    # --- 配置默认ePub路径 ---
-    DEFAULT_EPUB_PATH = "/Users/doudouda/Downloads/2/"
+    # --- 修改：动态加载默认路径 ---
+    default_path = load_default_path_from_settings()
 
     # 获取用户输入
     prompt_message = (
         "请输入要处理的 ePub 文件所在的目录路径\n"
-        f"(直接按 Enter 键将使用默认路径: {DEFAULT_EPUB_PATH}): "
+        f"(直接按 Enter 键将使用默认路径: {default_path}): "
     )
-    target_dir = input(prompt_message)
+    target_dir_input = input(prompt_message)
 
     # 如果用户未输入（或输入为空白），则使用默认路径
-    if not target_dir.strip():
-        target_dir = DEFAULT_EPUB_PATH
+    target_dir = target_dir_input.strip().strip('\'"') if target_dir_input.strip() else default_path
+    
+    if not target_dir_input.strip():
         print(f"未输入路径，将使用默认目录: {target_dir}")
-    else:
-        # 清除用户输入路径前后可能存在的空格或引号
-        target_dir = target_dir.strip().strip('\'"')
 
     # 检查最终确定的目录是否存在
     if not os.path.isdir(target_dir):

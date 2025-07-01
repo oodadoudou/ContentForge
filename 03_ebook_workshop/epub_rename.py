@@ -4,6 +4,7 @@ import zipfile
 import tempfile
 import shutil
 import xml.etree.ElementTree as ET
+import json
 
 def sanitize_filename(name):
     """移除字符串中的非法字符，使其成为有效的文件名。"""
@@ -28,6 +29,19 @@ def get_unique_filepath(path):
             return new_path
         counter += 1
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
 def run_epub_modifier_v8_final():
     """
     v8: 最终版。所有文件都会被处理，跳过的文件使用其原始元数据标题命名。
@@ -40,7 +54,8 @@ def run_epub_modifier_v8_final():
     print("  - 输入新标题将使用新标题命名。")
     print("  - 直接回车将使用书籍自身的元数据标题命名。")
 
-    default_path = "/Users/doudouda/Downloads/2/"
+    # --- 修改：动态加载默认路径 ---
+    default_path = load_default_path_from_settings()
     folder_path = input(f"\n请输入 EPUB 文件夹路径 (默认为: {default_path}): ").strip() or default_path
 
     if not os.path.isdir(folder_path):

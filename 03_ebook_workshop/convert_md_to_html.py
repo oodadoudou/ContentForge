@@ -3,6 +3,7 @@ import glob
 import sys
 import markdown2
 import base64
+import json
 
 def create_html_from_markdown(target_path):
     """
@@ -143,11 +144,13 @@ def create_html_from_markdown(target_path):
     """
 
     try:
-        highlight_js_path = "/Users/doudouda/Downloads/Personal_doc/Study/Proj/ContentForge/shared_assets/highlight.min.js"
+        # --- 修改：动态构建 highlight.min.js 的路径 ---
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        highlight_js_path = os.path.join(project_root, "shared_assets", "highlight.min.js")
         with open(highlight_js_path, "rb") as f:
             highlight_js_b64 = base64.b64encode(f.read()).decode('utf-8')
     except FileNotFoundError:
-        print("Warning: highlight.min.js not found. Syntax highlighting will not work.")
+        print("警告: 'shared_assets/highlight.min.js' 未找到。代码高亮将无法正常工作。")
         highlight_js_b64 = ""
 
     for md_file_path in md_files:
@@ -183,8 +186,35 @@ def create_html_from_markdown(target_path):
 
     print("\nAll files processed successfully!")
 
+
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
+# --- 修改：主程序块使用交互式输入 ---
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        create_html_from_markdown(sys.argv[1])
-    else:
-        print("Please provide the target directory as a command-line argument.")
+    default_path = load_default_path_from_settings()
+    
+    prompt_message = (
+        f"请输入包含 Markdown (.md) 文件的文件夹路径。\n"
+        f"(直接按 Enter 键，将使用默认路径 '{default_path}') : "
+    )
+    user_input = input(prompt_message)
+
+    target_directory = user_input.strip() if user_input.strip() else default_path
+    
+    if not target_directory:
+        print("错误：未提供有效路径。")
+        sys.exit(1)
+
+    print(f"[*] 已选择工作目录: {os.path.abspath(target_directory)}")
+    create_html_from_markdown(target_directory)

@@ -7,6 +7,8 @@ from ebooklib import epub, ITEM_DOCUMENT
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 from tqdm import tqdm
 import html
+import sys
+import json
 
 # --- 屏蔽已知警告 ---
 warnings.filterwarnings("ignore", category=UserWarning, module='ebooklib')
@@ -17,7 +19,6 @@ warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 # --- 常量定义 ---
 PROCESSED_DIR_NAME = "processed_files"
 REPORT_DIR_NAME = "compare_reference"
-DEFAULT_PATH = "/Users/doudouda/Downloads/2/"
 HIGHLIGHT_STYLE = "background-color: #f1c40f; color: #000; padding: 2px; border-radius: 3px;"
 
 def find_rules_file(directory: Path) -> Path | None:
@@ -263,16 +264,36 @@ def process_epub_file(file_path: Path, rules: pd.DataFrame, processed_dir: Path,
         print(f"\n[!] 处理EPUB文件失败 {file_path.name}: {e}")
     return False
 
+# --- 新增：函数用于从 settings.json 加载默认路径 ---
+def load_default_path_from_settings():
+    """从共享设置文件中读取默认工作目录。"""
+    try:
+        # 向上导航两级以到达项目根目录
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(project_root, 'shared_assets', 'settings.json')
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        # 如果 "default_work_dir" 存在且不为空，则返回它
+        default_dir = settings.get("default_work_dir")
+        return default_dir if default_dir else "."
+    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+        print(f"警告：读取 settings.json 失败 ({e})，将使用用户主目录下的 'Downloads' 作为备用路径。")
+        # 提供一个通用的备用路径
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
 def main():
     """主函数"""
+    # --- 修改：动态加载默认路径 ---
+    default_path = load_default_path_from_settings()
+    
     prompt_message = (
         f"请输入包含源文件和规则文件的文件夹路径。\n"
-        f"(直接按 Enter 键，将使用默认路径 '{DEFAULT_PATH}') : "
+        f"(直接按 Enter 键，将使用默认路径 '{default_path}') : "
     )
     user_input = input(prompt_message)
 
     if not user_input.strip():
-        directory_path = DEFAULT_PATH
+        directory_path = default_path
         print(f"[*] 未输入路径，已使用默认路径: {directory_path}")
     else:
         directory_path = user_input.strip()
