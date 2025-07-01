@@ -13,3 +13,4 @@ requests
 pypinyin
 browser-cookie3
 markdown2
+numpy
