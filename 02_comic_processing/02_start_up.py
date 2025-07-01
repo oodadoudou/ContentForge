@@ -15,16 +15,25 @@ def menu_comic_processing():
     
     while True:
         utils.print_header("2. 漫画处理与生成 (图片转PDF)")
-        print(" 1. [V3 智能流程] 合并、分割、重打包图片并生成 PDF (推荐)")
-        print(" 2. [快速转换] 将图片文件夹直接转为 PDF (无优化)")
+        print(" 1. [V2 快速流程] 合并、分割、重打包并生成 PDF (推荐)")
+        print(" 2. [V3 智能流程] 如v2 失败可用 v3 再尝试 (推荐)")
+        print(" 3. [V4 实验流程] 使用最新算法处理 (若V2,V3分割失败可尝试)")
+        print(" 4. [快速转换] 将图片文件夹直接转为 PDF (无优化)")
         print("----------")
         print(" 8. 查看本模块用法说明 (README)")
         print(" 0. 返回主菜单")
         choice = utils.get_input("请选择")
 
         if choice == '1':
+            # 运行稳定且推荐的V2版本
+            utils.run_script("image_processes_pipeline_v2.py", cwd=module_path)
+        elif choice == '2':
+            # 运行最新的V3版本，作为备用选项
             utils.run_script("image_processes_pipeline_v3.py", cwd=module_path)
         elif choice == '2':
+            # 运行最新的V4版本，作为备用选项
+            utils.run_script("image_processes_pipeline_v4.py", cwd=module_path)
+        elif choice == '3':
             utils.run_script("convert_to_pdf.py", cwd=module_path)
         elif choice == '8':
             utils.show_usage(module_path)
