@@ -19,6 +19,9 @@ def menu_comic_processing():
         print(" 2. [V3 智能流程] 如v2 失败可用 v3 再尝试 (推荐)")
         print(" 3. [V4 实验流程] 使用最新算法处理 (若V2,V3分割失败可尝试)")
         print(" 4. [快速转换] 将图片文件夹直接转为 PDF (无优化)")
+        # --- 新增选项 ---
+        print(" 5. [PDF 合并] 将各子文件夹内的所有PDF合并为单个文件")
+        # --- 新增结束 ---
         print("----------")
         print(" 8. 查看本模块用法说明 (README)")
         print(" 0. 返回主菜单")
@@ -34,7 +37,12 @@ def menu_comic_processing():
             # 运行最新的V4版本，作为备用选项
             utils.run_script("image_processes_pipeline_v4.py", cwd=module_path)
         elif choice == '4':
-            utils.run_script("convert_to_pdf.py", cwd=module_path)
+            utils.run_script("convert_img_to_pdf.py", cwd=module_path)
+        # --- 新增处理逻辑 ---
+        elif choice == '5':
+            # 运行PDF合并脚本
+            utils.run_script("merge_pdfs.py", cwd=module_path)
+        # --- 新增结束 ---
         elif choice == '8':
             utils.show_usage(module_path)
         elif choice == '0':
