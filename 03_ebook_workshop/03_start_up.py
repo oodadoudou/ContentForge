@@ -27,11 +27,13 @@ def menu_ebook_workshop():
         print("    └ 功能: 只进行繁体到简体的文字转换，不改变排版。")
         print(" 6. (综合) 修复竖排版并转为简体中文 (推荐)")
         print("    └ 功能: 自动检测并修正竖排版和繁体内容，一步到位。")
+        print(" 7. (内容) 批量移除 EPUB 封面")
+        print("    └ 功能: 删除封面图片及其所在的XHTML页面，并清理元数据。")
         
         print("\n--- 高级工具 ---")
-        print(" 7. 根据规则批量替换 EPUB/TXT 内容")
-        print(" 8. 用统一的 CSS 样式美化 EPUB")
-        print(" 9. 按章节数量均等分割 EPUB 文件")
+        print(" 8. 根据规则批量替换 EPUB/TXT 内容")
+        print(" 9. 用统一的 CSS 样式美化 EPUB")
+        print(" 10. 按章节数量均等分割 EPUB 文件")
 
         print("----------")
         print(" 88. 查看本模块用法说明 (README)")
@@ -45,19 +47,22 @@ def menu_ebook_workshop():
         elif choice == '3':
             utils.run_script("epub_to_txt_convertor.py", cwd=module_path)
         elif choice == '4':
-            # Corresponds to epub_rename.py
             utils.run_script("epub_rename.py", cwd=module_path)
         elif choice == '5':
-            # Corresponds to epub_convert_tc_to_sc.py
             utils.run_script("epub_convert_tc_to_sc.py", cwd=module_path)
         elif choice == '6':
-            # Corresponds to epub_reformat_and_convert_v2.py
             utils.run_script("epub_reformat_and_convert_v2.py", cwd=module_path)
         elif choice == '7':
-            utils.run_script("batch_replacer.py", cwd=module_path)
+            # --- 新增的功能 ---
+            utils.run_script("epub_cover_remover.py", cwd=module_path)
         elif choice == '8':
-            utils.run_script("epub_styler.py", cwd=module_path)
+            # 原来的 7
+            utils.run_script("batch_replacer.py", cwd=module_path)
         elif choice == '9':
+            # 原来的 8
+            utils.run_script("epub_styler.py", cwd=module_path)
+        elif choice == '10':
+            # 原来的 9
             utils.run_script("split_epub.py", cwd=module_path)
         elif choice == '88':
             utils.show_usage(module_path)
