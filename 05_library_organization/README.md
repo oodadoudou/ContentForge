@@ -10,8 +10,6 @@
 
 【核心脚本】
   - translate_and_org_dirs.py (⭐ 核心整理流程)
-  - move_comics.py (由 main.py 实现其功能)
-  - convert_tc_to_sc.py
   - extract_epub_css.py
 
 

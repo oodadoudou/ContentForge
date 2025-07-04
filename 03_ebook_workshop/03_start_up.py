@@ -35,6 +35,8 @@ def menu_ebook_workshop():
         print(" 9. 用统一的 CSS 样式美化 EPUB")
         print(" 10. 按章节数量均等分割 EPUB 文件")
         print(" 11. 合并文件夹内所有 EPUB")
+        print(" 12. [工具] EPUB 解包/封装工具")
+        print("     └ 功能: 批量解压 EPUB 便于编辑，或从文件夹重新打包成 EPUB。")
 
         print("----------")
         print(" 88. 查看本模块用法说明 (README)")
@@ -62,8 +64,9 @@ def menu_ebook_workshop():
         elif choice == '10':
             utils.run_script("split_epub.py", cwd=module_path)
         elif choice == '11':
-            # --- 新增的合并功能调用 ---
             utils.run_script("epub_merge.py", cwd=module_path)
+        elif choice == '12':
+            utils.run_script("epub_toolkit.py", cwd=module_path)
         elif choice == '88':
             utils.show_usage(module_path)
         elif choice == '0':

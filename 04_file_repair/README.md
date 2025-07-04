@@ -12,7 +12,7 @@
   - epub_reformat_and_convert_v2.py (⭐ EPUB综合工具)
   - cover_repair.py
   - fix_txt_encoding.py
-  - txt_reformat_chapter_safe.py
+  - txt_reformat.py
 
 
 【使用方法】
