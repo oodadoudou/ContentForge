@@ -1,16 +1,5 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
-# ===================================================================================
-# This script is adapted from the original Calibre 'epubmerge' plugin by Jim Miller.
-# The core merging logic is preserved to ensure robustness and compatibility.
-# The command-line interface has been replaced with a simple function
-# for easier use in this context.
-#
-# Original License: GPL v3
-# Original Copyright: 2020, Jim Miller
-# ===================================================================================
-
 import sys
 import os
 import logging
@@ -22,7 +11,10 @@ from zipfile import ZipFile, ZIP_STORED, ZIP_DEFLATED
 from time import time
 from xml.dom.minidom import parseString, getDOMImplementation, Element
 from six import text_type as unicode
-from six.moves.urllib.parse import unquote
+try:
+    from urllib.parse import unquote  # Python 3
+except ImportError:
+    from urllib import unquote        # Python 2
 
 # Setup basic logging
 logger = logging.getLogger(__name__)

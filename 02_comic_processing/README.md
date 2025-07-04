@@ -6,9 +6,11 @@
 
 【核心脚本】
 
+image_processes_pipeline_v2.py (快速流程)
 image_processes_pipeline_v3.py (⭐ 推荐的智能流程)
-
-convert_to_pdf.py (直接转换工具)
+image_processes_pipeline_v4.py (实验流程)
+convert_img_to_pdf.py (直接转换工具)
+merge_pdfs.py (PDF合并工具)
 
 【使用方法】
 本模块的所有功能都已整合到项目根目录的 main.py 交互式菜单中。
