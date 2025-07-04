@@ -34,6 +34,7 @@ def menu_ebook_workshop():
         print(" 8. 根据规则批量替换 EPUB/TXT 内容")
         print(" 9. 用统一的 CSS 样式美化 EPUB")
         print(" 10. 按章节数量均等分割 EPUB 文件")
+        print(" 11. 合并文件夹内所有 EPUB")
 
         print("----------")
         print(" 88. 查看本模块用法说明 (README)")
@@ -53,17 +54,16 @@ def menu_ebook_workshop():
         elif choice == '6':
             utils.run_script("epub_reformat_and_convert_v2.py", cwd=module_path)
         elif choice == '7':
-            # --- 新增的功能 ---
             utils.run_script("epub_cover_remover.py", cwd=module_path)
         elif choice == '8':
-            # 原来的 7
             utils.run_script("batch_replacer.py", cwd=module_path)
         elif choice == '9':
-            # 原来的 8
             utils.run_script("epub_styler.py", cwd=module_path)
         elif choice == '10':
-            # 原来的 9
             utils.run_script("split_epub.py", cwd=module_path)
+        elif choice == '11':
+            # --- 新增的合并功能调用 ---
+            utils.run_script("epub_merge.py", cwd=module_path)
         elif choice == '88':
             utils.show_usage(module_path)
         elif choice == '0':
