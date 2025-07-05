@@ -16,3 +16,5 @@ markdown2
 numpy
 pikepdf
 six
+py7zr
+zipfile
