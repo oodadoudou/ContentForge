@@ -20,25 +20,21 @@ Image.MAX_IMAGE_PIXELS = None
 # --- 目录与文件名配置 ---
 MERGED_LONG_IMAGE_SUBDIR_NAME = "merged_long_img"
 SPLIT_IMAGES_SUBDIR_NAME = "split_by_solid_band"
-FINAL_PDFS_SUBDIR_NAME = "merged_pdfs"
+SUCCESS_MOVE_SUBDIR_NAME = "IMG"  # 成功处理的文件夹将被移动到此目录
 LONG_IMAGE_FILENAME_BASE = "stitched_long_strip"
 IMAGE_EXTENSIONS_FOR_MERGE = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif')
 
-# ▼▼▼ [全新] V8 核心分割逻辑配置 (两阶段色彩同质性分析) ▼▼▼
-# 色彩量化因子。数值越大，颜色被简化的程度越高。32是一个均衡的起点。
+# ▼▼▼ V4 核心分割逻辑配置 (两阶段色彩同质性分析) ▼▼▼
 QUANTIZATION_FACTOR = 32
-# 被视为空白背景行的最大“量化后”颜色种类数。用于对抗噪点。
 MAX_UNIQUE_COLORS_IN_BG = 5
-# 最小连续空白区高度。
 MIN_SOLID_COLOR_BAND_HEIGHT = 30
-# 边缘一致性校验的边距百分比。0.1 表示检查最左侧10%和最右侧10%的区域。
 EDGE_MARGIN_PERCENT = 0.10
 
 # --- 重打包与PDF输出配置 ---
 MAX_REPACKED_FILESIZE_MB = 8
 MAX_REPACKED_PAGE_HEIGHT_PX = 30000
 PDF_TARGET_PAGE_WIDTH_PIXELS = 1500
-PDF_IMAGE_JPEG_QUALITY = 85
+PDF_IMAGE_JPEG_QUALITY = 90
 PDF_DPI = 300
 # --- 配置结束 ---
 
@@ -61,35 +57,46 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
         sys.stdout.flush()
 
 
-def merge_to_long_image(source_image_dir, output_long_image_dir, long_image_filename_only, target_width):
-    """将源目录中的所有图片垂直合并成一个PNG长图。"""
-    print(f"\n  --- 步骤 1: 合并图片至标准宽度 {target_width}px ---")
-    if not os.path.isdir(source_image_dir):
-        print(f"    错误: 源图片目录 '{source_image_dir}' 未找到。")
+def merge_to_long_image(source_project_dir, output_long_image_dir, long_image_filename_only, target_width):
+    """将源目录中的所有图片（包括子目录）垂直合并成一个标准宽度的PNG长图。"""
+    print(f"\n  --- 步骤 1: 合并项目 '{os.path.basename(source_project_dir)}' 的图片至标准宽度 {target_width}px ---")
+    if not os.path.isdir(source_project_dir):
+        print(f"    错误: 源项目目录 '{source_project_dir}' 未找到。")
         return None
 
     os.makedirs(output_long_image_dir, exist_ok=True)
     output_long_image_path = os.path.join(output_long_image_dir, long_image_filename_only)
-
-    image_filenames = [f for f in os.listdir(source_image_dir) if os.path.isfile(os.path.join(source_image_dir, f)) and f.lower().endswith(IMAGE_EXTENSIONS_FOR_MERGE) and not f.startswith('.')]
-    if not image_filenames:
-        print(f"    在 '{source_image_dir}' 中未找到符合条件的图片。")
+    
+    print(f"    ... 正在递归扫描 '{os.path.basename(source_project_dir)}' 及其所有子文件夹以查找图片 ...")
+    image_filepaths = []
+    try:
+        for dirpath, _, filenames in os.walk(source_project_dir):
+            if MERGED_LONG_IMAGE_SUBDIR_NAME in dirpath or SPLIT_IMAGES_SUBDIR_NAME in dirpath:
+                continue
+            for filename in filenames:
+                if filename.lower().endswith(IMAGE_EXTENSIONS_FOR_MERGE) and not filename.startswith('.'):
+                    image_filepaths.append(os.path.join(dirpath, filename))
+    except Exception as e:
+        print(f"    错误: 扫描目录 '{source_project_dir}' 时发生错误: {e}")
         return None
 
-    sorted_image_filenames = natsort.natsorted(image_filenames)
+    if not image_filepaths:
+        print(f"    在 '{os.path.basename(source_project_dir)}' 及其子目录中未找到符合条件的图片。")
+        return None
+
+    sorted_image_filepaths = natsort.natsorted(image_filepaths)
     images_data, total_height = [], 0
-    print_progress_bar(0, len(sorted_image_filenames), prefix='    分析并计算尺寸:', suffix='完成', length=40)
-    for i, filename in enumerate(sorted_image_filenames):
-        filepath = os.path.join(source_image_dir, filename)
+    print_progress_bar(0, len(sorted_image_filepaths), prefix='    分析并计算尺寸:', suffix='完成', length=40)
+    for i, filepath in enumerate(sorted_image_filepaths):
         try:
             with Image.open(filepath) as img:
                 new_height = int(img.height * (target_width / img.width)) if img.width != target_width else img.height
                 images_data.append({"path": filepath, "new_height": new_height})
                 total_height += new_height
         except Exception as e:
-            print(f"\n    警告: 打开或读取图片 '{filename}' 失败: {e}。已跳过。")
+            print(f"\n    警告: 打开或读取图片 '{os.path.basename(filepath)}' 失败: {e}。已跳过。")
             continue
-        print_progress_bar(i + 1, len(sorted_image_filenames), prefix='    分析并计算尺寸:', suffix='完成', length=40)
+        print_progress_bar(i + 1, len(sorted_image_filepaths), prefix='    分析并计算尺寸:', suffix='完成', length=40)
 
     if not images_data or target_width <= 0 or total_height <= 0:
         print(f"    计算得到的画布尺寸异常 ({target_width}x{total_height})，无法创建长图。")
@@ -117,9 +124,9 @@ def merge_to_long_image(source_image_dir, output_long_image_dir, long_image_file
         print(f"    错误: 保存合并后的长图失败: {e}")
         return None
 
-# ▼▼▼ [全新] V8 核心函数 - 两阶段色彩同质性分析 ▼▼▼
+# ▼▼▼ V4 核心函数 - 两阶段色彩同质性分析 ▼▼▼
 def get_dominant_color_numpy(pixels_quantized):
-    """[V7 性能核心] 使用纯NumPy从量化后的像素块中找到主色调。"""
+    """[V4 性能核心] 使用纯NumPy从量化后的像素块中找到主色调。"""
     if pixels_quantized.size == 0:
         return None, 0
     pixels_list = pixels_quantized.reshape(-1, 3)
@@ -130,11 +137,11 @@ def get_dominant_color_numpy(pixels_quantized):
     dominant_color = tuple(unique_colors[np.argmax(counts)])
     return dominant_color, num_unique_colors
 
-def split_long_image_v8(long_image_path, output_split_dir, quantization_factor, max_unique_colors, min_band_height, edge_margin_percent):
+def split_long_image_v4(long_image_path, output_split_dir, quantization_factor, max_unique_colors, min_band_height, edge_margin_percent):
     """
-    [V8 核心逻辑] 通过两阶段向量化分析来识别和分割图像，实现极致速度。
+    [V4 核心逻辑] 通过两阶段向量化分析来识别和分割图像，实现极致速度。
     """
-    print(f"\n  --- 步骤 2 (V8 - 两阶段极速分析): 分割长图 '{os.path.basename(long_image_path)}' ---")
+    print(f"\n  --- 步骤 2 (V4 - 两阶段极速分析): 分割长图 '{os.path.basename(long_image_path)}' ---")
     start_time = time.time()
     if not os.path.isfile(long_image_path):
         print(f"    错误: 长图路径 '{long_image_path}' 未找到。")
@@ -159,7 +166,7 @@ def split_long_image_v8(long_image_path, output_split_dir, quantization_factor, 
             margin_width = int(img_width * edge_margin_percent)
             center_start, center_end = margin_width, img_width - margin_width
 
-            # --- [V8 核心优化 1: 快速筛选阶段] ---
+            # --- [V4 核心优化 1: 快速筛选阶段] ---
             print("    [2/3] 快速筛选候选行...")
             candidate_indices = []
             candidate_dominant_colors = {}
@@ -177,7 +184,7 @@ def split_long_image_v8(long_image_path, output_split_dir, quantization_factor, 
                 shutil.copy2(long_image_path, dest_path)
                 return [dest_path]
 
-            # --- [V8 核心优化 2: 精准验证阶段] ---
+            # --- [V4 核心优化 2: 精准验证阶段] ---
             print(f"    [3/3] 从 {len(candidate_indices)} 个候选行中精准验证边缘...")
             row_types = np.full(img_height, 'complex', dtype=object)
             # 只对少数候选行进行耗时的边缘分析
@@ -235,7 +242,7 @@ def split_long_image_v8(long_image_path, output_split_dir, quantization_factor, 
             split_image_paths.append(output_filepath)
             
             if not cut_found:
-                print("\n    [V8 诊断报告] 未能找到任何合格的空白区进行分割。")
+                print("\n    [V4 诊断报告] 未能找到任何合格的空白区进行分割。")
                 print(f"    建议检查参数: MAX_UNIQUE_COLORS_IN_BG={max_unique_colors}, MIN_SOLID_COLOR_BAND_HEIGHT={min_band_height}")
                 if len(split_image_paths) == 1:
                     os.remove(split_image_paths[0])
@@ -368,11 +375,12 @@ def cleanup_intermediate_dirs(long_img_dir, split_img_dir):
 
 
 if __name__ == "__main__":
-    print("自动化图片批量处理流程脚本启动！ (V8 - 两阶段极速版)")
-    print("流程：1.合并 -> 2.两阶段同质性分割 -> 2.5.重打包 -> 3.创建PDF -> 4.清理")
+    print("自动化图片批量处理流程 (V4 - 两阶段极速版)")
+    print("工作流程: 1.合并 -> 2.分割 -> 2.5.重打包 -> 3.创建PDF -> 4.清理 -> 5.移动成功项")
     print("-" * 70)
     
     def load_default_path_from_settings():
+        """从共享设置文件中读取默认工作目录。"""
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             settings_path = os.path.join(script_dir, 'shared_assets', 'settings.json')
@@ -384,33 +392,57 @@ if __name__ == "__main__":
     
     default_root_dir_name = load_default_path_from_settings() or "."
 
+    root_input_dir = ""
     while True:
-        user_input = input(f"请输入根目录路径 (Enter 使用默认: '{default_root_dir_name}'): ").strip()
-        root_input_dir = os.path.abspath(user_input or default_root_dir_name)
-        if os.path.isdir(root_input_dir):
+        prompt_message = (
+            f"请输入包含一个或多个项目子文件夹的【根目录】路径。\n"
+            f"脚本将递归处理每个项目子文件夹中的所有图片。\n"
+            f"(直接按 Enter 键将使用默认路径: '{default_root_dir_name}'): "
+        )
+        user_provided_path = input(prompt_message).strip()
+        current_path_to_check = user_provided_path if user_provided_path else default_root_dir_name
+        if not user_provided_path:
+            print(f"使用默认路径: {current_path_to_check}")
+
+        abs_path_to_check = os.path.abspath(current_path_to_check)
+        if os.path.isdir(abs_path_to_check):
+            root_input_dir = abs_path_to_check
             print(f"已选定根处理目录: {root_input_dir}")
             break
         else:
-            print(f"错误：路径 '{root_input_dir}' 不是一个有效的目录。")
+            print(f"错误: 路径 '{abs_path_to_check}' 不是一个有效的目录或不存在。")
 
-    overall_pdf_output_dir = os.path.join(root_input_dir, FINAL_PDFS_SUBDIR_NAME)
+    # 根据根目录名称创建唯一的PDF输出文件夹
+    root_dir_basename = os.path.basename(os.path.abspath(root_input_dir))
+    overall_pdf_output_dir = os.path.join(root_input_dir, f"{root_dir_basename}_pdfs")
     os.makedirs(overall_pdf_output_dir, exist_ok=True)
     
-    subdirectories = [d for d in os.listdir(root_input_dir) if os.path.isdir(os.path.join(root_input_dir, d)) and d not in [MERGED_LONG_IMAGE_SUBDIR_NAME, SPLIT_IMAGES_SUBDIR_NAME, FINAL_PDFS_SUBDIR_NAME] and not d.startswith('.')]
+    # 创建用于存放成功处理项目的文件夹
+    success_move_target_dir = os.path.join(root_input_dir, SUCCESS_MOVE_SUBDIR_NAME)
+    os.makedirs(success_move_target_dir, exist_ok=True)
+
+    # 扫描要处理的项目子文件夹，排除脚本的管理文件夹
+    subdirectories = [d for d in os.listdir(root_input_dir)
+                      if os.path.isdir(os.path.join(root_input_dir, d)) and \
+                         d != SUCCESS_MOVE_SUBDIR_NAME and \
+                         d != os.path.basename(overall_pdf_output_dir) and \
+                         not d.startswith('.')]
+
     if not subdirectories:
-        print(f"\n在 '{root_input_dir}' 下没有找到可处理的一级子文件夹。")
+        print(f"\n在根目录 '{root_input_dir}' 中未找到可处理的项目子文件夹。")
         sys.exit()
 
     sorted_subdirectories = natsort.natsorted(subdirectories)
-    print(f"\n将按顺序处理以下 {len(sorted_subdirectories)} 个子文件夹: {', '.join(sorted_subdirectories)}")
+    print(f"\n将按顺序处理以下 {len(sorted_subdirectories)} 个项目文件夹: {', '.join(sorted_subdirectories)}")
     failed_subdirs_list = []
 
     for i, subdir_name in enumerate(sorted_subdirectories):
-        print(f"\n\n{'='*10} 开始处理: {subdir_name} ({i+1}/{len(sorted_subdirectories)}) {'='*10}")
+        print(f"\n\n{'='*10} 开始处理项目: {subdir_name} ({i+1}/{len(sorted_subdirectories)}) {'='*10}")
         current_processing_subdir = os.path.join(root_input_dir, subdir_name)
         path_long_image_output_dir = os.path.join(current_processing_subdir, MERGED_LONG_IMAGE_SUBDIR_NAME)
         path_split_images_output_dir = os.path.join(current_processing_subdir, SPLIT_IMAGES_SUBDIR_NAME)
         
+        # 每次都清理旧的中间文件，以防上次失败残留
         if os.path.isdir(path_long_image_output_dir): shutil.rmtree(path_long_image_output_dir)
         if os.path.isdir(path_split_images_output_dir): shutil.rmtree(path_split_images_output_dir)
 
@@ -421,8 +453,8 @@ if __name__ == "__main__":
 
         pdf_created_for_this_subdir = False
         if created_long_image_path:
-            # ▼▼▼ 调用全新的 V8 两阶段分割函数 ▼▼▼
-            split_segment_paths = split_long_image_v8(
+            # ▼▼▼ 调用 V4 两阶段分割函数 ▼▼▼
+            split_segment_paths = split_long_image_v4(
                 created_long_image_path, path_split_images_output_dir,
                 QUANTIZATION_FACTOR, MAX_UNIQUE_COLORS_IN_BG,
                 MIN_SOLID_COLOR_BAND_HEIGHT, EDGE_MARGIN_PERCENT
@@ -442,8 +474,24 @@ if __name__ == "__main__":
 
         if pdf_created_for_this_subdir:
             cleanup_intermediate_dirs(path_long_image_output_dir, path_split_images_output_dir)
+            
+            # --- 新增功能：移动处理成功的文件夹 ---
+            print(f"\n  --- 步骤 5: 移动已成功处理的项目文件夹 ---")
+            source_folder_to_move = current_processing_subdir
+            destination_parent_folder = success_move_target_dir
+            
+            try:
+                print(f"    准备将 '{os.path.basename(source_folder_to_move)}' 移动到 '{os.path.basename(destination_parent_folder)}' 文件夹中...")
+                shutil.move(source_folder_to_move, destination_parent_folder)
+                moved_path = os.path.join(destination_parent_folder, os.path.basename(source_folder_to_move))
+                print(f"    成功移动文件夹至: {moved_path}")
+            except Exception as e:
+                print(f"    错误: 移动文件夹 '{os.path.basename(source_folder_to_move)}' 失败: {e}")
+                if subdir_name not in failed_subdirs_list:
+                    failed_subdirs_list.append(f"{subdir_name} (移动失败)")
+
         else:
-            print(f"  ❌ 子文件夹 '{subdir_name}' 未能成功生成PDF，将保留中间文件以供检查。")
+            print(f"  ❌ 项目文件夹 '{subdir_name}' 未能成功生成PDF，将保留中间文件以供检查。")
             failed_subdirs_list.append(subdir_name)
 
         print(f"{'='*10} '{subdir_name}' 处理完毕 {'='*10}")
@@ -453,5 +501,8 @@ if __name__ == "__main__":
     success_count = len(sorted_subdirectories) - len(failed_subdirs_list)
     print(f"总计处理项目: {len(sorted_subdirectories)} 个\n  - ✅ 成功: {success_count} 个\n  - ❌ 失败: {len(failed_subdirs_list)} 个")
     if failed_subdirs_list:
-        print("\n失败项目列表:\n" + "\n".join(f"  - {d}" for d in failed_subdirs_list))
-    print("-" * 70 + f"\n所有成功生成的PDF文件已保存在: {overall_pdf_output_dir}\n脚本执行完毕。")
+        print("\n失败项目列表 (已保留在原位):\n" + "\n".join(f"  - {d}" for d in failed_subdirs_list))
+    print("-" * 70)
+    print(f"所有成功生成的PDF文件（如有）已保存在: {overall_pdf_output_dir}")
+    print(f"所有成功处理的原始项目文件夹（如有）已移至: {success_move_target_dir}")
+    print("脚本执行完毕。")
