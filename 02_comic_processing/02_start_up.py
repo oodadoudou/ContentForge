@@ -16,13 +16,10 @@ def menu_comic_processing():
     while True:
         utils.print_header("2. 漫画处理与生成 (图片转PDF)")
         print(" 1. [V2 快速流程] 合并、分割、重打包并生成 PDF (推荐)")
-        print(" 2. [V3 智能流程] 如v2 失败可用 v3 再尝试 (推荐)")
-        print(" 3. [V4 实验流程] 使用最新算法处理 (若V2,V3分割失败可尝试)")
-        print(" 4. [快速转换] 将图片文件夹直接转为 PDF (无优化)")
-        print(" 5. [PDF 合并] 将各子文件夹内的所有PDF合并为单个文件")
-        # --- ▼▼▼ 新增功能菜单项 ▼▼▼ ---
-        print(" 6. [PDF 转图片] 将PDF转为图片 (支持超长图分割)")
-        # --- ▲▲▲ 新增功能菜单项 ▲▲▲ ---
+        print(" 2. [V4 实验流程] 使用最新算法处理 (若V2分割失败可尝试)")
+        print(" 3. [快速转换] 将图片文件夹直接转为 PDF (无优化)")
+        print(" 4. [PDF 合并] 将各子文件夹内的所有PDF合并为单个文件")
+        print(" 5. [PDF 转图片] 将PDF转为图片 (支持超长图分割)")
         print("----------")
         print(" 8. 查看本模块用法说明 (README)")
         print(" 0. 返回主菜单")
@@ -32,21 +29,16 @@ def menu_comic_processing():
             # 运行稳定且推荐的V2版本
             utils.run_script("image_processes_pipeline_v2.py", cwd=module_path)
         elif choice == '2':
-            # 运行最新的V3版本，作为备用选项
-            utils.run_script("image_processes_pipeline_v3.py", cwd=module_path)
-        elif choice == '3':
             # 运行最新的V4版本，作为备用选项
             utils.run_script("image_processes_pipeline_v4.py", cwd=module_path)
-        elif choice == '4':
+        elif choice == '3':
             utils.run_script("convert_img_to_pdf.py", cwd=module_path)
-        elif choice == '5':
+        elif choice == '4':
             # 运行PDF合并脚本
             utils.run_script("merge_pdfs.py", cwd=module_path)
-        # --- ▼▼▼ 新增功能处理逻辑 ▼▼▼ ---
-        elif choice == '6':
+        elif choice == '5':
             # 运行PDF转图片（支持长图分割）的脚本
             utils.run_script("convert_long_pdf.py", cwd=module_path)
-        # --- ▲▲▲ 新增功能处理逻辑 ▲▲▲ ---
         elif choice == '8':
             utils.show_usage(module_path)
         elif choice == '0':

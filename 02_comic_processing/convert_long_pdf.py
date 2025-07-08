@@ -3,16 +3,11 @@ import fitz  # PyMuPDF
 from PIL import Image
 import math
 import sys
-import json # 新增: 用于解析JSON配置文件
-import traceback # 新增: 用于更详细的错误追踪
+import json
+import shutil
+import traceback
 
 # --- 可配置参数 ---
-
-# 删除了旧的硬编码 DEFAULT_INPUT_DIR
-# DEFAULT_INPUT_DIR = "/Users/doudouda/Downloads/2/"
-
-# 输出文件夹的名称，此文件夹将被创建在输入目录内
-OUTPUT_FOLDER_NAME = "processed_files"
 
 # 图像渲染的DPI (分辨率)，越高质量越好，文件也越大
 DPI = 300
@@ -23,64 +18,68 @@ MAX_PAGE_HEIGHT = 16384
 # 输出图片格式 ('png' 或 'jpg')
 IMAGE_FORMAT = 'png'
 
-# --- 脚本主逻辑 (此部分未作修改) ---
+# 新增：处理完的PDF源文件存放目录名
+PROCESSED_PDF_FOLDER_NAME = "converted_pdfs"
+
+# --- 脚本主逻辑 ---
 
 def convert_pdf_with_splitting(input_dir: str):
     """
     扫描输入目录中的PDF文件，将其转换为图片。
-    输出文件夹 'processed_files' 将被创建在输入目录内。
     如果页面过长，则进行切割。
+    每个PDF的输出图片将保存在输入目录下一个与PDF同名的子文件夹内。
+    成功处理的PDF源文件将被移动到 'converted_pdfs' 文件夹。
 
     Args:
         input_dir (str): 包含PDF文件的输入目录。
     """
-    base_output_dir = os.path.join(input_dir, OUTPUT_FOLDER_NAME)
-    
+    # 创建存放已处理PDF的文件夹
+    processed_pdfs_dir = os.path.join(input_dir, PROCESSED_PDF_FOLDER_NAME)
+    os.makedirs(processed_pdfs_dir, exist_ok=True)
+
     print("-" * 50)
     print(f"[*] 开始处理...")
     print(f"[*] 输入目录 (PDF来源): {input_dir}")
-    print(f"[*] 输出目录 (结果保存至): {base_output_dir}")
     print(f"[*] 页面最大高度: {MAX_PAGE_HEIGHT}px")
+    print(f"[*] 已处理的PDF将被移至: {processed_pdfs_dir}")
     print("-" * 50)
 
     if not os.path.isdir(input_dir):
-        print(f"[ERROR] 输入目录 '{input_dir}' 不存在。请检查路径。")
+        print(f"[错误] 输入目录 '{input_dir}' 不存在。请检查路径。")
         return
 
     try:
         pdf_files = [f for f in os.listdir(input_dir) if f.lower().endswith('.pdf') and not f.startswith('.')]
         if not pdf_files:
-            print(f"[WARN] 在目录 '{input_dir}' 中未找到任何PDF文件。")
+            print(f"[警告] 在目录 '{input_dir}' 中未找到任何PDF文件。")
             return
     except Exception as e:
-        print(f"[ERROR] 无法读取输入目录 '{input_dir}': {e}")
+        print(f"[错误] 无法读取输入目录 '{input_dir}': {e}")
         return
 
     print(f"[*] 找到 {len(pdf_files)} 个PDF文件，准备开始转换。")
 
     successful_conversions = 0
     failed_conversions = 0
-    os.makedirs(base_output_dir, exist_ok=True)
 
     for pdf_file in sorted(pdf_files):
         pdf_path = os.path.join(input_dir, pdf_file)
         
         if not os.path.exists(pdf_path):
             print(f"\n--- 跳过文件: {pdf_file} ---")
-            print(f"  [WARN] 文件路径无效或不可读: {pdf_path}")
-            print(f"  [HINT] 请检查文件名是否包含特殊字符、多余的空格或是否为损坏的链接。")
+            print(f"  [警告] 文件路径无效或不可读: {pdf_path}")
             failed_conversions += 1
             continue
 
         pdf_base_name = os.path.splitext(pdf_file)[0]
-        current_output_subdir = os.path.join(base_output_dir, pdf_base_name)
+        current_output_subdir = os.path.join(input_dir, pdf_base_name)
         
         try:
             os.makedirs(current_output_subdir, exist_ok=True)
             print(f"\n--- 处理文件: {pdf_file} ---")
             print(f"    输出至: {current_output_subdir}")
         except Exception as e:
-            print(f"[ERROR] 创建输出子目录 '{current_output_subdir}' 失败: {e}")
+            print(f"[错误] 创建输出子目录 '{current_output_subdir}' 失败: {e}")
             failed_conversions += 1
             continue 
         
@@ -113,8 +112,16 @@ def convert_pdf_with_splitting(input_dir: str):
             print(f"--- 完成文件: {pdf_file} ---")
             successful_conversions += 1
 
+            # 新增：移动已成功处理的PDF文件
+            try:
+                destination_path = os.path.join(processed_pdfs_dir, pdf_file)
+                shutil.move(pdf_path, destination_path)
+                print(f"    -> 已将源文件 '{pdf_file}' 移动至 '{PROCESSED_PDF_FOLDER_NAME}' 文件夹。")
+            except Exception as move_error:
+                print(f"    [警告] 移动文件 '{pdf_file}' 失败: {move_error}")
+
         except Exception as e:
-            print(f"[ERROR] 处理文件 '{pdf_file}' 时发生严重错误: {type(e).__name__} - {e}")
+            print(f"[错误] 处理文件 '{pdf_file}' 时发生严重错误: {type(e).__name__} - {e}")
             failed_conversions += 1
             continue
 
@@ -122,12 +129,14 @@ def convert_pdf_with_splitting(input_dir: str):
     print(f"[*] 所有任务处理完毕。")
     print(f"    成功处理: {successful_conversions} 个PDF文件。")
     print(f"    跳过/失败: {failed_conversions} 个PDF文件。")
+    print(f"[*] 所有输出的图片均保存在各自PDF同名的子文件夹中。")
+    print(f"[*] 所有处理过的PDF源文件均已移至 '{PROCESSED_PDF_FOLDER_NAME}' 文件夹。")
     print("=" * 50)
 
 # ▼▼▼ 主函数已按您的要求进行标准化修改 ▼▼▼
 if __name__ == "__main__":
     print("\n" + "=" * 70)
-    print("=== PDF转图片工具 (支持超长图自动分割) ===")
+    print("=== PDF转图片工具 (支持超长图自动分割与源文件归档) ===")
     print("=" * 70)
 
     # --- 标准化函数：从共享设定档中读取预设工作目录 ---
@@ -175,7 +184,7 @@ if __name__ == "__main__":
     try:
         convert_pdf_with_splitting(input_dir=input_dir)
     except KeyboardInterrupt:
-        print("\n\n[INFO] 操作被用户中断，程序已退出。")
+        print("\n\n[信息] 操作被用户中断，程序已退出。")
         sys.exit(0)
     except Exception as e:
         print("\n" + "!"*70)
