@@ -1,10 +1,6 @@
 import os
 import sys
-import json
-import shlex
-import shutil
 import subprocess
-import re
 
 # =================================================================
 #                 全局变量与路径设置
@@ -81,7 +77,7 @@ def manage_ai_config():
 
 
 def menu_install_dependencies():
-    """一键安装/更新依赖"""
+    """一键安装/更新依赖，优化了跨平台兼容性和错误提示"""
     utils.print_header("安装/更新项目依赖")
     
     requirements_path = os.path.join(utils.PROJECT_ROOT, 'requirements.txt')
@@ -94,21 +90,38 @@ def menu_install_dependencies():
     print(f"将使用 pip 安装 '{requirements_path}' 中的所有依赖。")
     if utils.get_input("是否继续? (按回车确认, 输入 n 取消): ").lower() != 'n':
         try:
-            # --- 修改：简化指令以提高跨平台兼容性 ---
-            command = f'pip install -r "{requirements_path}"'
-            print(f"\n▶️  正在执行: {command}")
-            print("注意：此操作依赖于 'pip' 在您系统的环境变量中。")
+            # --- MODIFIED: 使用 sys.executable -m pip 的方式调用，这是最可靠的跨平台方案 ---
+            command = [sys.executable, "-m", "pip", "install", "-r", requirements_path]
+            print(f"\n▶️  正在执行: {' '.join(command)}")
             print("-" * 60)
-            subprocess.check_call(command, shell=True)
+            
+            # 使用 subprocess.run 并捕获输出，以便在出错时显示详细信息
+            result = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
+            
+            # 打印 pip 的输出
+            print(result.stdout)
             print("\n✅ 依赖安装成功！")
+
         except subprocess.CalledProcessError as e:
-            print(f"\n❌ 依赖安装失败。错误: {e}")
+            # --- MODIFIED: 提供更详细的错误信息和备用手动命令 ---
+            print("\n❌ 自动安装依赖失败。")
+            print("="*20 + " 错误详情 " + "="*20)
+            print(e.stderr)  # 打印 pip 的具体错误输出
+            print("="*52)
+            print("\n请尝试在您的终端中手动执行以下命令之一：")
+            print("\n【推荐】方案一 (最可靠):")
+            # 为 Windows 用户提供可以直接复制的命令
+            print(f"   python -m pip install -r \"{requirements_path}\"")
+            print("\n方案二 (如果方案一无效):")
+            print(f"   pip install -r \"{requirements_path}\"")
+            print("\n如果问题仍然存在，请检查您的 Python 和 pip 环境配置。")
+            
         except FileNotFoundError:
-            print("\n❌ 错误: 'pip' 命令未找到。请确保 Python 和 Pip 已正确安装并已添加到您系统的 PATH 环境变量中。")
+            print("\n❌ 错误: 'python' 或 'pip' 命令未找到。请确保 Python 已正确安装并已添加到您系统的 PATH 环境变量中。")
         except Exception as e:
             print(f"\n❌ 发生未知错误: {e}")
     
-    input("按回车键返回菜单...")
+    input("\n按回车键返回菜单...")
 
 def menu_system_settings():
     """模块六: 系统设置与依赖"""
@@ -137,24 +150,18 @@ def menu_system_settings():
 def main():
     """主函数，显示主菜单并调用子模块入口。"""
     
-    # --- 新增：首次运行检查 ---
     settings_path = os.path.join(PROJECT_ROOT, 'shared_assets', 'settings.json')
 
-    # 检查配置文件是否存在
     if not os.path.exists(settings_path):
-        # 如果不存在，则认为是首次运行，引导用户进行配置
         configure_default_path(first_time=True)
     
-    # 无论文件之前是否存在，现在都加载配置
-    # 如果文件是新创建的，会加载新配置；如果已存在，则加载现有配置
     utils.load_settings()
 
-    # 保留一个备用检查：防止 settings.json 存在但 default_work_dir 无效
     if not os.path.isdir(utils.settings.get('default_work_dir', '')):
         print("\n警告：检测到配置文件中的默认工作目录无效或未设置。")
         configure_default_path(first_time=False)
 
-
+    # --- MODIFIED: 添加了模块 7 ---
     main_menu = {
         '1': ('内容获取 (从网站下载漫画)', '01_acquisition/01_start_up.py'),
         '2': ('漫画处理与生成 (图片转PDF)', '02_comic_processing/02_start_up.py'),
@@ -162,12 +169,16 @@ def main():
         '4': ('文件修复与工具 (解决常见问题)', '04_file_repair/04_start_up.py'),
         '5': ('文件库管理 (整理、归档、重命名)', '05_library_organization/05_start_up.py'),
         '6': ('系统设置与依赖', menu_system_settings),
-        '0': ('退出程序', lambda: sys.exit(0)) # 使用lambda包装以统一调用方式
+        '7': ('通用下载器', '07_downloader/07_start_up.py'), # --- ADDED ---
+        '0': ('退出程序', lambda: sys.exit(0))
     }
 
     while True:
         utils.print_header("欢迎使用 ContentForge 主菜单")
-        for key, (text, _) in main_menu.items():
+        # 对菜单项进行排序，确保 '0' 在最后
+        sorted_items = sorted(main_menu.items(), key=lambda item: float('inf') if item[0] == '0' else int(item[0]))
+        
+        for key, (text, _) in sorted_items:
             if key != '0':
                 print(f" {key}. {text}")
         print(" 0. 退出程序")
@@ -176,10 +187,10 @@ def main():
         
         if choice in main_menu:
             action = main_menu[choice][1]
-            if isinstance(action, str): # 如果是脚本路径
+            if isinstance(action, str):
                 script_path = os.path.join(PROJECT_ROOT, action)
                 subprocess.run([sys.executable, script_path], cwd=PROJECT_ROOT)
-            else: # 如果是函数
+            else:
                 if choice == '0':
                      print("\n\n感谢使用 ContentForge！(｡･ω･｡)ﾉ♡")
                 action()
