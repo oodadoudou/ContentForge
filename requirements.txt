@@ -17,4 +17,4 @@ numpy
 pikepdf
 six
 py7zr
-zipfile
+selenium
