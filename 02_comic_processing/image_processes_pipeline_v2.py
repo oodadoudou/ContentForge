@@ -340,7 +340,7 @@ def _merge_image_list_for_repack(image_paths, output_path):
     return True
 
 
-def repack_split_images(split_image_paths, output_dir, base_filename, max_size_mb=5):
+def repack_split_images(split_image_paths, output_dir, base_filename, max_size_mb=8):
     """
     将分割后的图片按大小重新打包合并。
     - 合并后的图片块上限为 max_size_mb。
