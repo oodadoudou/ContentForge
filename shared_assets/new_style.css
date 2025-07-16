@@ -1,12 +1,8 @@
 @namespace epub "http://www.idpf.org/2007/ops";
 
-@font-face {
-    font-family: "ReaderFont";
-    src: url(res:///system/fonts/DroidSansFallback.ttf); /* 兼容旧设备 */
-}
+/* @font-face 规则已移除 */
 
 body {
-    font-family: -apple-system, "system-ui", "BlinkMacSystemFont", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", "sans-serif", "ReaderFont";
     line-height: 1.7; /* 舒适的行高 */
     margin: 3% 5%;    /* 页面边距 */
     text-align: justify; /* 两端对齐 */
