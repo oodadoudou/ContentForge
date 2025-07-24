@@ -16,7 +16,8 @@ def menu_ebook_workshop():
     while True:
         utils.print_header("3. 电子书处理与生成 (TXT/EPUB/HTML)")
         print("--- 创建与转换 ---")
-        print(" 1. [创建] 从 TXT 创建带章节目录的 EPUB")
+        print(" 1. [创建] 从 TXT 创建带章节目录的 EPUB (⭐新增样式选择)")
+        print("    └ 功能: 智能章节识别 + 5种精美样式 + 实时预览 + 自定义封面")
         print(" 2. [创建] 将 Markdown 文件夹批量转为 HTML")
         print(" 3. [转换] 从 EPUB 提取纯文本内容 (TXT)")
         

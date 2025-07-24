@@ -8,9 +8,6 @@ import shutil
 from ebooklib import epub
 import json
 
-# =================================================================
-#         新增：从 remove_nav.py 参考并集成的核心功能
-# =================================================================
 
 # 注册 EPUB 相关的 XML 命名空间，以便正确解析
 NAMESPACES = {
@@ -91,11 +88,6 @@ def remove_epub_navigation(epub_path):
         if os.path.exists(temp_epub_path):
             os.remove(temp_epub_path)
 
-
-# =================================================================
-#                 原脚本修改部分
-# =================================================================
-
 def print_progress_bar(iteration, total, prefix='进度', suffix='完成', length=50, fill='█'):
     """打印进度条的辅助函数。"""
     percent = ("{0:.1f}").format(100 * (iteration / float(total)))
@@ -105,6 +97,124 @@ def print_progress_bar(iteration, total, prefix='进度', suffix='完成', lengt
     sys.stdout.flush()
     if iteration == total:
         sys.stdout.write('\n')
+
+# 样式配置
+STYLE_OPTIONS = {
+    "1": {
+        "name": "经典简约",
+        "description": "标准电子书排版，适合大多数小说和文学作品",
+        "file": "epub_style_classic.css"
+    },
+    "2": {
+        "name": "温馨护眼",
+        "description": "温暖色调，舒适行距，减少眼部疲劳，适合长时间阅读",
+        "file": "epub_style_warm.css"
+    },
+    "3": {
+        "name": "现代清新",
+        "description": "左对齐标题，现代感强，适合技术文档和现代文学",
+        "file": "epub_style_modern.css"
+    },
+    "4": {
+        "name": "优雅古典",
+        "description": "古典风格，适合古典文学、诗词和传统文化类书籍",
+        "file": "epub_style_elegant.css"
+    },
+    "5": {
+        "name": "简洁现代",
+        "description": "极简设计，适合商务文档和学术论文",
+        "file": "epub_style_minimal.css"
+    }
+}
+
+def select_epub_style():
+    """让用户选择EPUB样式"""
+    print("\n" + "="*60)
+    print("📚 选择电子书样式")
+    print("="*60)
+    print("\n🎨 可用样式:\n")
+    
+    for key, style in STYLE_OPTIONS.items():
+        print(f"{key}. {style['name']}")
+        print(f"   📖 {style['description']}")
+        print()
+    
+    print("💡 提示: 输入 'p' 或 'preview' 可以打开样式预览页面")
+    print()
+    
+    while True:
+        choice = input("请选择样式 (1-5，默认为1，p=预览): ").strip().lower()
+        if not choice:
+            choice = "1"
+        
+        # 处理预览请求
+        if choice in ['p', 'preview']:
+            open_style_preview()
+            print("\n🎨 可用样式:\n")
+            for key, style in STYLE_OPTIONS.items():
+                print(f"{key}. {style['name']} - {style['description']}")
+            print()
+            continue
+        
+        if choice in STYLE_OPTIONS:
+            selected_style = STYLE_OPTIONS[choice]
+            print(f"\n✅ 已选择样式: {selected_style['name']}")
+            return selected_style['file']
+        else:
+            print("❌ 无效选择，请输入1-5之间的数字，或输入 'p' 查看预览")
+
+def open_style_preview():
+    """打开样式预览页面"""
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+        preview_path = os.path.join(project_root, 'shared_assets', 'epub_styles_preview.html')
+        
+        if not os.path.exists(preview_path):
+            print(f"⚠️  预览文件不存在: {preview_path}")
+            return
+        
+        print(f"🌐 正在打开样式预览页面...")
+        
+        # 根据操作系统选择合适的打开命令
+        import platform
+        system = platform.system()
+        
+        if system == "Darwin":  # macOS
+            subprocess.run(["open", preview_path])
+        elif system == "Windows":
+            subprocess.run(["start", preview_path], shell=True)
+        else:  # Linux
+            subprocess.run(["xdg-open", preview_path])
+            
+        print(f"✅ 样式预览已在浏览器中打开")
+        print(f"📁 预览文件位置: {preview_path}")
+        
+    except Exception as e:
+        print(f"❌ 打开预览失败: {e}")
+        print("💡 您可以手动打开项目根目录下的 'epub_styles_preview.html' 文件")
+
+def load_style_content(style_filename):
+    """加载指定的样式文件内容"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    style_path = os.path.join(project_root, 'shared_assets', 'epub_css', style_filename)
+    
+    try:
+        with open(style_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        print(f"⚠️  加载样式文件失败: {e}")
+        print("正在尝试加载默认样式...")
+        
+        # 回退到默认样式
+        try:
+            default_css_path = os.path.join(project_root, 'shared_assets', "new_style.css")
+            with open(default_css_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e2:
+            print(f"❌ 加载默认样式也失败: {e2}")
+            return None
 
 def scan_directory(work_dir):
     """扫描目录，查找 TXT, 封面图片和 CSS 文件。"""
@@ -129,20 +239,19 @@ def scan_directory(work_dir):
                     css_content = f.read()
                 print(f"  [加载样式] 成功加载用户目录中的样式文件: '{filename}'。")
             except Exception as e:
-                print(f"  [警告] 读取CSS文件 '{filename}' 失败: {e}。将尝试加载默认样式。")
+                print(f"  [警告] 读取CSS文件 '{filename}' 失败: {e}。将使用样式选择器。")
     
+    # 如果没有找到用户自定义CSS，让用户选择样式
     if css_content is None:
-        print("  [提示] 未在工作目录中找到CSS文件，正在尝试加载内置的默认样式...")
-        try:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(script_dir)
-            default_css_path = os.path.join(project_root, 'shared_assets', "new_style.css")
-            with open(default_css_path, 'r', encoding='utf-8') as f:
-                css_content = f.read()
-            print(f"  [加载样式] 成功加载默认样式: {os.path.basename(default_css_path)}")
-        except Exception as e:
-            print(f"\n[致命错误] 加载默认样式失败: {e}")
+        print("  [提示] 未在工作目录中找到CSS文件，请选择内置样式...")
+        selected_style_file = select_epub_style()
+        css_content = load_style_content(selected_style_file)
+        
+        if css_content is None:
+            print(f"\n[致命错误] 无法加载任何样式文件")
             sys.exit(1)
+        else:
+            print(f"  [加载样式] 成功加载样式: {selected_style_file}")
         
     if not txt_files:
         print("\n[错误] 在指定目录中未找到任何 .txt 文件。")
@@ -226,9 +335,11 @@ def confirm_and_edit_toc(current_txt_file, l1_regex, l2_regex):
         
         new_toc = []
         for line in lines:
-            if line.strip().startswith('- '):
-                title = line.strip()[2:].strip()
-                if line.startswith('    '):
+            line_stripped = line.strip()
+            if line_stripped.startswith('- '):
+                title = line_stripped[2:].strip()
+                # 检查原始行是否以4个空格开头（二级目录）
+                if line.startswith('    - '):
                     new_toc.append((title, 2))
                 else:
                     new_toc.append((title, 1))
