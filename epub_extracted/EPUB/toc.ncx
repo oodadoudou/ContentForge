@@ -1,0 +1,122 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta content="id_邂逅.zh_1750813904.8646417" name="dtb:uid"/>
+    <meta content="0" name="dtb:depth"/>
+    <meta content="0" name="dtb:totalPageCount"/>
+    <meta content="0" name="dtb:maxPageNumber"/>
+  </head>
+  <docTitle>
+    <text>邂逅.zh</text>
+  </docTitle>
+  <navMap>
+    <navPoint id="sep_0">
+      <navLabel>
+        <text>相遇 0. 特别的客人</text>
+      </navLabel>
+      <content src="chap_0.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_1">
+      <navLabel>
+        <text>1.半分的怜悯</text>
+      </navLabel>
+      <content src="chap_1.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_2">
+      <navLabel>
+        <text>2. 重逢</text>
+      </navLabel>
+      <content src="chap_2.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_3">
+      <navLabel>
+        <text>3. 别扭的同谋</text>
+      </navLabel>
+      <content src="chap_3.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_4">
+      <navLabel>
+        <text>4. 探踪</text>
+      </navLabel>
+      <content src="chap_4.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_5">
+      <navLabel>
+        <text>5. 订婚</text>
+      </navLabel>
+      <content src="chap_5.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_6">
+      <navLabel>
+        <text>6.阴影</text>
+      </navLabel>
+      <content src="chap_6.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_7">
+      <navLabel>
+        <text>7. 好人</text>
+      </navLabel>
+      <content src="chap_7.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_8">
+      <navLabel>
+        <text>8. 混乱</text>
+      </navLabel>
+      <content src="chap_8.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_9">
+      <navLabel>
+        <text>9. 约定</text>
+      </navLabel>
+      <content src="chap_9.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_10">
+      <navLabel>
+        <text>10. 间隙(1)</text>
+      </navLabel>
+      <content src="chap_10.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_11">
+      <navLabel>
+        <text>10. 间隙(2)</text>
+      </navLabel>
+      <content src="chap_11.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_12">
+      <navLabel>
+        <text>11. 最后的记忆</text>
+      </navLabel>
+      <content src="chap_12.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_13">
+      <navLabel>
+        <text>12. 然后</text>
+      </navLabel>
+      <content src="chap_13.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_14">
+      <navLabel>
+        <text>13. 后来</text>
+      </navLabel>
+      <content src="chap_14.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_15">
+      <navLabel>
+        <text>外传 - 你是我的</text>
+      </navLabel>
+      <content src="chap_15.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_16">
+      <navLabel>
+        <text>外传2 - 某一天</text>
+      </navLabel>
+      <content src="chap_16.xhtml"/>
+    </navPoint>
+    <navPoint id="sep_17">
+      <navLabel>
+        <text>外传3 李夏景</text>
+      </navLabel>
+      <content src="chap_17.xhtml"/>
+    </navPoint>
+  </navMap>
+</ncx>
