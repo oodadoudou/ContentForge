@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能替换报告 - {{source_filename}}</title>
+    <link rel="stylesheet" href="shared_assets/report_styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 智能替换报告</h1>
+            <div class="subtitle">{{source_filename}}</div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card clickable" onclick="toggleRulesList()">
+                <span class="stat-number">{{rules_count}}</span>
+                <div class="stat-label">替换规则</div>
+                <div class="expand-hint">点击查看详情</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{total_instances}}</span>
+                <div class="stat-label">替换实例</div>
+            </div>
+        </div>
+        
+        <div class="rules-list-container" id="rules-list">
+            <div class="rules-list-modal">
+                <div class="rules-list-header">
+                    <h3>所有替换规则</h3>
+                    <button class="close-btn" onclick="toggleRulesList()">×</button>
+                </div>
+                <div class="rules-list-content">
+                    {{rules_list_items}}
+                </div>
+            </div>
+        </div>
+        
+        <div class="content">
+            {{content_sections}}
+        </div>
+        
+        <div class="footer">
+        报告生成时间: {{generation_time}}
+    </div>
+</div>
+
+<!-- 返回顶部按钮 -->
+<button id="back-to-top" class="back-to-top" title="返回顶部">
+    ↑
+</button>
+
+<script src="shared_assets/report_scripts.js"></script>
+</body>
+</html>

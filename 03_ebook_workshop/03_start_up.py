@@ -27,8 +27,8 @@ def menu_ebook_workshop():
         print("    └ 功能: 只进行繁体到简体的文字转换，不改变排版。")
         print(" 6. (综合) 修复竖排版并转为简体中文 (推荐)")
         print("    └ 功能: 自动检测并修正竖排版和繁体内容，一步到位。")
-        print(" 7. (内容) 批量移除 EPUB 封面")
-        print("    └ 功能: 删除封面图片及其所在的XHTML页面，并清理元数据。")
+        print(" 7. (清理) EPUB 清理工具 (封面/字体)")
+        print("    └ 功能: 删除 EPUB 中的封面、字体文件和 CSS 字体声明，支持单独或组合操作。")
         
         print("\n--- 高级工具 ---")
         print(" 8. 根据规则批量替换 EPUB/TXT 内容")
@@ -56,7 +56,7 @@ def menu_ebook_workshop():
         elif choice == '6':
             utils.run_script("epub_reformat_and_convert_v2.py", cwd=module_path)
         elif choice == '7':
-            utils.run_script("epub_cover_remover.py", cwd=module_path)
+            utils.run_script("epub_cleaner.py", cwd=module_path)
         elif choice == '8':
             utils.run_script("batch_replacer.py", cwd=module_path)
         elif choice == '9':
