@@ -1,92 +1,18 @@
 import os
 import re
 import sys
-import zipfile
 import subprocess
 import xml.etree.ElementTree as ET
-import shutil
 from ebooklib import epub
 import json
+import platform
 
-
-# 注册 EPUB 相关的 XML 命名空间，以便正确解析
 NAMESPACES = {
     'container': 'urn:oasis:names:tc:opendocument:xmlns:container',
     'opf': 'http://www.idpf.org/2007/opf',
 }
 ET.register_namespace('', NAMESPACES['opf'])
 
-def remove_epub_navigation(epub_path):
-    """
-    直接修改给定的 EPUB 文件，移除其导航文件 (nav.xhtml)，以优化超长目录。
-    这是一个破坏性操作，会直接修改传入路径的文件。
-
-    Args:
-        epub_path (str): 要处理的 EPUB 文件的路径。
-
-    Returns:
-        bool: 如果处理成功则返回 True，否则返回 False。
-    """
-    print(f"  [LOG] 开始优化 EPUB: {os.path.basename(epub_path)}")
-    # 创建一个临时备份文件名
-    backup_path = epub_path + ".backup"
-    temp_epub_path = epub_path + ".tmp"
-    try:
-        # 使用 shutil 复制文件进行备份，比重命名更安全
-        shutil.copy2(epub_path, backup_path)
-
-        # 直接在原文件上进行操作
-        with zipfile.ZipFile(backup_path, 'r') as zin:
-            # --- 步骤 1: 找到 OPF 清单文件的路径 ---
-            container_data = zin.read('META-INF/container.xml')
-            container_root = ET.fromstring(container_data)
-            rootfile_element = container_root.find('container:rootfiles/container:rootfile', NAMESPACES)
-            if rootfile_element is None:
-                raise ValueError("在 META-INF/container.xml 中找不到 rootfile 元素。")
-            opf_path = rootfile_element.get('full-path')
-
-            # --- 步骤 2: 读取并修改 OPF 清单文件 ---
-            opf_content = zin.read(opf_path)
-            opf_root = ET.fromstring(opf_content)
-            manifest = opf_root.find('opf:manifest', NAMESPACES)
-            nav_item = manifest.find("opf:item[@properties='nav']", NAMESPACES)
-
-            if nav_item is None:
-                print(f"  [警告] 在清单中未找到导航文件条目，无需移除。")
-                return True # 无需操作也视为成功
-
-            nav_full_path = os.path.normpath(os.path.join(os.path.dirname(opf_path), nav_item.get('href')))
-            manifest.remove(nav_item)
-            print(f"  [LOG] 已从清单中移除 '{nav_full_path}' 的条目。")
-            modified_opf_bytes = ET.tostring(opf_root, encoding='utf-8', xml_declaration=True)
-
-            # --- 步骤 3: 创建不含导航的新 EPUB 文件 ---
-            with zipfile.ZipFile(temp_epub_path, 'w', zipfile.ZIP_DEFLATED) as zout:
-                for item in zin.infolist():
-                    if item.filename == nav_full_path:
-                        continue
-                    elif item.filename == opf_path:
-                        zout.writestr(item.filename, modified_opf_bytes)
-                    else:
-                        zout.writestr(item, zin.read(item.filename))
-        
-        # 用修改后的临时文件覆盖原始文件
-        os.replace(temp_epub_path, epub_path)
-        print(f"  [成功] 已从 {os.path.basename(epub_path)} 中移除导航文件。")
-        return True
-
-    except Exception as e:
-        print(f"  [错误] 移除导航文件时出错: {e}")
-        # 如果出错，从备份恢复
-        if os.path.exists(backup_path):
-            os.replace(backup_path, epub_path)
-        return False
-    finally:
-        # 无论成功与否，都删除备份文件
-        if os.path.exists(backup_path):
-            os.remove(backup_path)
-        if os.path.exists(temp_epub_path):
-            os.remove(temp_epub_path)
 
 def print_progress_bar(iteration, total, prefix='进度', suffix='完成', length=50, fill='█'):
     """打印进度条的辅助函数。"""
@@ -98,8 +24,88 @@ def print_progress_bar(iteration, total, prefix='进度', suffix='完成', lengt
     if iteration == total:
         sys.stdout.write('\n')
 
-# 样式配置
-STYLE_OPTIONS = {
+# 阅读器类型配置
+READER_TYPES = {
+    "1": {
+        "name": "静读天下",
+        "description": "专为静读天下阅读器优化的样式",
+        "css_dir": "Moonreader",
+        "preview_file": "moonreader_preview.html"
+    },
+    "2": {
+        "name": "其他阅读器",
+        "description": "适用于大多数EPUB阅读器的通用样式",
+        "css_dir": "basic",
+        "preview_file": "epub_styles_preview.html"
+    }
+}
+
+# 静读天下样式配置
+MOONREADER_STYLE_OPTIONS = {
+    "1": {
+        "name": "灰度层次样式",
+        "description": "灰度配色方案，层次分明，适合专业文档",
+        "file": "moonreader_epub_style_grayscale.css"
+    },
+    "2": {
+        "name": "线条层次样式",
+        "description": "线条层次设计，清晰结构，适合教育类书籍",
+        "file": "moonreader_epub_style_line_hierarchy.css"
+    },
+    "3": {
+        "name": "线性极简样式",
+        "description": "线性极简设计，现代风格，适合商务文档",
+        "file": "moonreader_epub_style_linear.css"
+    },
+    "4": {
+        "name": "简约网格样式",
+        "description": "网格布局设计，简约风格，适合技术手册",
+        "file": "moonreader_epub_style_minimal_grid.css"
+    },
+    "5": {
+        "name": "极简线性样式",
+        "description": "线性设计，极简风格，适合技术文档",
+        "file": "moonreader_epub_style_minimal_linear.css"
+    },
+    "6": {
+        "name": "现代极简样式",
+        "description": "现代极简设计，简洁大方，适合现代文学",
+        "file": "moonreader_epub_style_minimal_modern.css"
+    },
+    "7": {
+        "name": "简洁现代样式",
+        "description": "极简设计，适合商务文档和学术论文",
+        "file": "moonreader_epub_style_minimal.css"
+    },
+    "8": {
+        "name": "现代清新样式",
+        "description": "左对齐标题，现代感强，适合技术文档和现代文学",
+        "file": "moonreader_epub_style_modern.css"
+    },
+    "9": {
+        "name": "单色极简样式",
+        "description": "单色设计，极简风格，适合现代阅读体验",
+        "file": "moonreader_epub_style_monochrome.css"
+    },
+    "10": {
+        "name": "柔和圆润样式",
+        "description": "圆润设计，柔和视觉效果，适合休闲阅读",
+        "file": "moonreader_epub_style_soft.css"
+    },
+    "11": {
+        "name": "结构化简约样式",
+        "description": "结构化设计，简约风格，适合学术研究",
+        "file": "moonreader_epub_style_structured_minimal.css"
+    },
+    "12": {
+        "name": "温馨护眼样式",
+        "description": "温暖色调，舒适行距，减少眼部疲劳，适合长时间阅读",
+        "file": "moonreader_epub_style_warm.css"
+    }
+}
+
+# 通用阅读器样式配置
+BASIC_STYLE_OPTIONS = {
     "1": {
         "name": "经典简约样式",
         "description": "标准电子书排版，适合大多数小说和文学作品",
@@ -171,8 +177,8 @@ STYLE_OPTIONS = {
         "file": "epub_style_minimal_linear.css"
     },
     "15": {
-        "name": "纯净极简样式",
-        "description": "纯净设计，极简风格，适合学术论文",
+        "name": "简约网格样式",
+        "description": "网格布局设计，简约风格，适合技术手册",
         "file": "epub_style_minimal_grid.css"
     },
     "16": {
@@ -181,8 +187,8 @@ STYLE_OPTIONS = {
         "file": "epub_style_geometric_frame.css"
     },
     "17": {
-        "name": "简约网格样式",
-        "description": "网格布局，简约设计，适合技术手册",
+        "name": "奇幻冒险样式",
+        "description": "充满想象力的设计，适合奇幻小说和冒险故事",
         "file": "epub_style_fantasy.css"
     },
     "18": {
@@ -202,15 +208,47 @@ STYLE_OPTIONS = {
     }
 }
 
-def select_epub_style():
+def select_reader_type():
+    """选择阅读器类型"""
+    print("\n" + "="*60)
+    print("📱 选择阅读器类型")
+    print("="*60)
+    
+    # 显示阅读器类型选项
+    for key, reader in READER_TYPES.items():
+        print(f"{key}. {reader['name']}")
+        print(f"   {reader['description']}")
+        print()
+    
+    while True:
+        try:
+            choice = input("请选择阅读器类型 (默认选择1): ").strip()
+            if not choice:
+                choice = "1"  # 默认选择静读天下
+            
+            if choice in READER_TYPES:
+                return choice, READER_TYPES[choice]
+            else:
+                print("❌ 无效的选择，请重新选择")
+        except (ValueError, KeyboardInterrupt):
+            print("\n❌ 输入无效，请重新选择")
+
+def select_epub_style(reader_type_info):
     """让用户选择EPUB样式"""
     print("\n" + "="*60)
-    print("📚 选择电子书样式")
+    print(f"📚 {reader_type_info['name']} - 选择电子书样式")
     print("="*60)
+    
+    # 根据阅读器类型选择样式配置
+    if reader_type_info['css_dir'] == 'Moonreader':
+        style_options = MOONREADER_STYLE_OPTIONS
+    else:
+        style_options = BASIC_STYLE_OPTIONS
+    
     print("\n🎨 可用样式:")
     
     # 分组显示，每行显示2个样式
-    items = list(STYLE_OPTIONS.items())
+    items = list(style_options.items())
     for i in range(0, len(items), 2):
         line = ""
         for j in range(2):
@@ -224,16 +262,17 @@ def select_epub_style():
     print("\n💡 提示: 输入 'p' 预览所有样式")
     
     while True:
-        choice = input("请选择样式 (1-20，默认为1，p=预览): ").strip().lower()
+        max_choice = len(style_options)
+        choice = input(f"请选择样式 (1-{max_choice}，默认为1，p=预览): ").strip().lower()
         if not choice:
             choice = "1"
         
         # 处理预览请求
         if choice in ['p', 'preview']:
-            open_style_preview()
+            open_style_preview(reader_type_info)
             print("\n🎨 可用样式:")
             # 分组显示，每行显示2个样式
-            items = list(STYLE_OPTIONS.items())
+            items = list(style_options.items())
             for i in range(0, len(items), 2):
                 line = ""
                 for j in range(2):
@@ -246,19 +285,19 @@ def select_epub_style():
             print()
             continue
         
-        if choice in STYLE_OPTIONS:
-            selected_style = STYLE_OPTIONS[choice]
+        if choice in style_options:
+            selected_style = style_options[choice]
             print(f"\n✅ 已选择样式: {selected_style['name']}")
-            return selected_style['file']
+            return choice
         else:
-            print("❌ 无效选择，请输入1-20之间的数字，或输入 'p' 查看预览")
+            print(f"❌ 无效选择，请输入1-{max_choice}之间的数字，或输入 'p' 查看预览")
 
-def open_style_preview():
+def open_style_preview(reader_type_info):
     """打开样式预览页面"""
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(script_dir)
-        preview_path = os.path.join(project_root, 'shared_assets', 'epub_styles_preview.html')
+        preview_path = os.path.join(project_root, 'shared_assets', reader_type_info['preview_file'])
         
         if not os.path.exists(preview_path):
             print(f"⚠️  预览文件不存在: {preview_path}")
@@ -267,7 +306,6 @@ def open_style_preview():
         print(f"🌐 正在打开样式预览页面...")
         
         # 根据操作系统选择合适的打开命令
-        import platform
         system = platform.system()
         
         if system == "Darwin":  # macOS
@@ -279,36 +317,31 @@ def open_style_preview():
             
         print(f"✅ 样式预览已在浏览器中打开")
         print(f"📁 预览文件位置: {preview_path}")
-        
     except Exception as e:
         print(f"❌ 打开预览失败: {e}")
-        print("💡 您可以手动打开项目根目录下的 'epub_styles_preview.html' 文件")
 
-def load_style_content(style_filename):
-    """加载指定的样式文件内容"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    style_path = os.path.join(project_root, 'shared_assets', 'epub_css', style_filename)
-    
+def load_style_content(style_filename, reader_type_info):
+    """加载样式文件内容"""
     try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+        style_path = os.path.join(project_root, 'shared_assets', 'epub_css', reader_type_info['css_dir'], style_filename)
+        
+        if not os.path.exists(style_path):
+            print(f"⚠️  样式文件不存在: {style_path}")
+            return None
+            
         with open(style_path, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        print(f"⚠️  加载样式文件失败: {e}")
-        print("正在尝试加载默认样式...")
-        
-        # 回退到默认样式
-        try:
-            default_css_path = os.path.join(project_root, 'shared_assets', "new_style.css")
-            with open(default_css_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except Exception as e2:
-            print(f"❌ 加载默认样式也失败: {e2}")
-            return None
+        print(f"❌ 加载样式文件失败: {e}")
+        return None
 
 def scan_directory(work_dir):
     """扫描目录，查找 TXT, 封面图片和 CSS 文件。"""
     txt_files, cover_image_path, css_content = [], None, None
+    selected_style_key = None
+    reader_type_info = None
     image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff']
     
     print("\n--- 正在扫描工作目录 ---")
@@ -328,26 +361,46 @@ def scan_directory(work_dir):
                 with open(full_path, 'r', encoding='utf-8') as f:
                     css_content = f.read()
                 print(f"  [加载样式] 成功加载用户目录中的样式文件: '{filename}'。")
+                selected_style_key = 'custom'
             except Exception as e:
                 print(f"  [警告] 读取CSS文件 '{filename}' 失败: {e}。将使用样式选择器。")
     
     # 如果没有找到用户自定义CSS，让用户选择样式
     if css_content is None:
         print("  [提示] 未在工作目录中找到CSS文件，请选择内置样式...")
-        selected_style_file = select_epub_style()
-        css_content = load_style_content(selected_style_file)
+        
+        # 选择阅读器类型
+        reader_type_key, reader_type_info = select_reader_type()
+        
+        # 选择样式
+        selected_style_key = select_epub_style(reader_type_info)
+        
+        if selected_style_key is None:
+            print(f"\n[用户取消] 用户取消了样式选择，程序退出")
+            sys.exit(0)
+        
+        # 根据阅读器类型获取样式配置
+        if reader_type_info['css_dir'] == 'Moonreader':
+            style_options = MOONREADER_STYLE_OPTIONS
+        else:
+            style_options = BASIC_STYLE_OPTIONS
+        
+        style_filename = style_options[selected_style_key]['file']
+        css_content = load_style_content(style_filename, reader_type_info)
         
         if css_content is None:
-            print(f"\n[致命错误] 无法加载任何样式文件")
+            print(f"\n[致命错误] 无法加载样式文件")
             sys.exit(1)
         else:
-            print(f"  [加载样式] 成功加载样式: {selected_style_file}")
+            style_name = style_options[selected_style_key]['name']
+            print(f"  [加载样式] 成功加载样式: {style_name}")
+            print(f"  [继续流程] 开始生成EPUB文件...")
         
     if not txt_files:
         print("\n[错误] 在指定目录中未找到任何 .txt 文件。")
         sys.exit(1)
 
-    return txt_files, cover_image_path, css_content
+    return txt_files, cover_image_path, css_content, selected_style_key, reader_type_info
 
 def get_toc_rules():
     """向用户询问并获取提取目录的正则表达式规则。"""
@@ -442,7 +495,7 @@ def text_to_html(text):
     html_paragraphs = [f'<p>{p.replace(os.linesep, "<br/>").strip()}</p>' for p in paragraphs if p.strip()]
     return '\n'.join(html_paragraphs)
 
-def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex, output_dir):
+def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex, output_dir, selected_style_key, reader_type_info):
     """核心函数：创建 EPUB 文件。"""
     default_book_name = os.path.splitext(os.path.basename(txt_path))[0]
     print(f"\n--- 步骤 3: 确认电子书标题 ---")
@@ -450,6 +503,19 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
     book_name = new_title if new_title else default_book_name
     print(f"[LOG] 电子书标题将设为: '{book_name}'")
     print("\n--- 步骤 4: 正在生成 EPUB 文件... ---")
+    
+    # 确定CSS文件名
+    if selected_style_key == 'custom':
+        css_filename = "style/custom.css"
+    else:
+        # 根据阅读器类型获取样式配置
+        if reader_type_info and reader_type_info['css_dir'] == 'Moonreader':
+            style_options = MOONREADER_STYLE_OPTIONS
+        else:
+            style_options = BASIC_STYLE_OPTIONS
+        
+        style_file = style_options[selected_style_key]['file']
+        css_filename = f"style/{style_file}"
     
     book = epub.EpubBook()
     book.set_identifier(f"id_{book_name}_{os.path.getmtime(txt_path)}")
@@ -491,7 +557,19 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
 
     if not all_headings_map:
         chapter_item = epub.EpubHtml(title=book_name, file_name='chap_0.xhtml', lang='zh')
-        chapter_item.content = text_to_html(full_text)
+        html_content = text_to_html(full_text)
+        chapter_item.content = f'''<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>{book_name}</title>
+<link rel="stylesheet" type="text/css" href="{css_filename}"/>
+</head>
+<body>
+{html_content}
+</body>
+</html>'''
+        # 确保CSS样式表被链接到章节中
+        chapter_item.add_link(href=css_filename, rel="stylesheet", type="text/css")
         chapters.append(chapter_item)
     else:
         total_headings = len(all_headings_map)
@@ -505,7 +583,19 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
             
             filename = f'chap_{i}.xhtml'
             chapter_item = epub.EpubHtml(title=heading_info['title'], file_name=filename, lang='zh')
-            chapter_item.content = f'<h{heading_info["level"]} class="titlel{heading_info["level"]}std">{heading_info["title"]}</h{heading_info["level"]}>\n{html_content}'
+            chapter_content = f'<h{heading_info["level"]} class="titlel{heading_info["level"]}std">{heading_info["title"]}</h{heading_info["level"]}>' + '\n' + html_content
+            chapter_item.content = f'''<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>{heading_info["title"]}</title>
+<link rel="stylesheet" type="text/css" href="{css_filename}"/>
+</head>
+<body>
+{chapter_content}
+</body>
+</html>'''
+            # 确保CSS样式表被链接到章节中
+            chapter_item.add_link(href=css_filename, rel="stylesheet", type="text/css")
             chapters.append(chapter_item)
             chapter_map.append({'title': heading_info['title'], 'level': heading_info['level'], 'filename': filename})
             print_progress_bar(i + 1, total_headings, prefix='[PROGRESS] 创建章节文件:', suffix='完成')
@@ -525,83 +615,24 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
             l2_link = epub.Link(chap_info['filename'], chap_info['title'], f'uid_{chap_info["filename"]}')
             l1_section[1].append(l2_link)
     
-    style_item = epub.EpubItem(uid="style_default", file_name="style/default.css", media_type="text/css", content=css_content)
+    style_item = epub.EpubItem(uid="style_default", file_name=css_filename, media_type="text/css", content=css_content)
     book.add_item(style_item)
     
     book.toc = epub_toc
     book.add_item(epub.EpubNcx())
     
-    # 创建自定义的导航文件，包含CSS样式引用
-    nav_content = f'''<?xml version='1.0' encoding='utf-8'?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="zh" xml:lang="zh">
-  <head>
-    <title>{book_name}</title>
-    <link rel="stylesheet" type="text/css" href="style/default.css"/>
-  </head>
-  <body>
-    <nav epub:type="toc" id="id" role="doc-toc">
-      <h2>{book_name}</h2>
-      <ol>'''
+    # 先添加所有章节到书籍中
+    for chap in chapters:
+        book.add_item(chap)
     
-    for item in epub_toc:
-        if isinstance(item, tuple) and len(item) == 2:
-            # 一级目录
-            link, sub_items = item
-            nav_content += f'''
-        <li>
-          <a href="{link.href}">{link.title}</a>'''
-            if sub_items:
-                nav_content += '\n          <ol>'
-                for sub_link in sub_items:
-                    nav_content += f'''
-            <li>
-              <a href="{sub_link.href}">{sub_link.title}</a>
-            </li>'''
-                nav_content += '\n          </ol>'
-            else:
-                nav_content += '\n          <ol/>'
-            nav_content += '\n        </li>'
-        else:
-            # 单个链接
-            nav_content += f'''
-        <li>
-          <a href="{item.href}">{item.title}</a>
-          <ol/>
-        </li>'''
-    
-    nav_content += '''
-      </ol>
-    </nav>
-  </body>
-</html>'''
-    
-    nav_item = epub.EpubHtml(title='Navigation', file_name='nav.xhtml', lang='zh')
-    nav_item.content = nav_content
-    nav_item.add_item(style_item)
-    book.add_item(nav_item) 
-    
-    book.spine = ['nav'] + chapters
+    # 设置spine（阅读顺序）
+    book.spine = chapters
     if cover_path:
         book.spine.insert(0, 'cover')
-        
-    for chap in chapters:
-        chap.add_item(style_item)
-        book.add_item(chap)
 
     try:
         epub.write_epub(output_path, book, {})
         print(f"\n[成功] EPUB 文件已保存到: {output_path}")
-
-        if len(final_toc) > 15:
-            print("-" * 50)
-            prompt = (f"[提示] 检测到目录超过15项 ({len(final_toc)}项)，这可能影响在某些设备上的阅读体验。\n"
-                      f"是否要移除EPUB的导航文件以优化性能? (按回车确认, 输入n保留): ")
-            if input(prompt).lower() != 'n':
-                print("\n--- 步骤 5: 优化超长目录 ---")
-                remove_epub_navigation(output_path)
-            else:
-                 print("  [跳过] 已根据您的选择保留导航目录。")
 
     except Exception as e:
         print(f"  [错误] 写入 EPUB 文件时失败: {e}")
@@ -640,7 +671,7 @@ if __name__ == "__main__":
     os.makedirs(output_dir, exist_ok=True)
     print(f"\n[提示] 所有生成的EPUB文件将被保存在: {output_dir}")
     
-    txt_files_list, cover_image, css_data = scan_directory(work_directory)
+    txt_files_list, cover_image, css_data, style_key, reader_info = scan_directory(work_directory)
     
     print(f"\n在目录中总共找到了 {len(txt_files_list)} 个 TXT 文件，将逐一处理。")
     print("-" * 60)
@@ -655,7 +686,7 @@ if __name__ == "__main__":
             print("因读取文件失败，跳过此文件。")
             continue
             
-        create_epub(current_txt_file, final_toc_list, css_data, cover_image, l1_regex, l2_regex, output_dir)
+        create_epub(current_txt_file, final_toc_list, css_data, cover_image, l1_regex, l2_regex, output_dir, style_key, reader_info)
         print("-" * 60)
 
     print("\n所有任务已完成！")
