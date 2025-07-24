@@ -74,61 +74,144 @@ def load_rules(rules_file: Path) -> pd.DataFrame:
 
 
 def generate_report(report_path: Path, changes_log: list, source_filename: str):
-    """生成HTML格式的变更报告,包含原文和变更后两列。"""
+    """
+    生成HTML格式的变更报告。
+    
+    Args:
+        report_path: 报告文件路径
+        changes_log: 变更记录列表，每个元素包含 'original' 和 'modified' 键
+        source_filename: 源文件名
+    """
     if not changes_log:
+        print(f"[!] 没有变更记录，跳过报告生成: {report_path}")
         return
-
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="zh-CN">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>变更报告: {html.escape(source_filename)}</title>
-        <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f9f9f9; }}
-            .container {{ max-width: 1200px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
-            h1 {{ color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }}
-            th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; vertical-align: top; }}
-            th {{ background-color: #3498db; color: white; }}
-            td {{ word-wrap: break-word; }}
-            th.original-col, td.original-col {{ width: 50%; }}
-            th.modified-col, td.modified-col {{ width: 50%; }}
-            tr:nth-child(even) {{ background-color: #f2f2f2; }}
-            .highlight {{ {HIGHLIGHT_STYLE} }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>变更报告: {html.escape(source_filename)}</h1>
-            <table>
-                <thead>
-                    <tr>
-                        <th class="original-col">原文 (高亮显示)</th>
-                        <th class="modified-col">变更后 (高亮显示)</th>
-                    </tr>
-                </thead>
-                <tbody>
-    """
-
-    for entry in changes_log:
-        html_content += f"""
-                    <tr>
-                        <td class="original-col">{entry['original']}</td>
-                        <td class="modified-col">{entry['modified']}</td>
-                    </tr>
-        """
-
-    html_content += """
-                </tbody>
-            </table>
-        </div>
-    </body>
-    </html>
-    """
+    
+    # 获取项目根目录和模板路径
+    project_root = Path(__file__).parent.parent
+    template_path = project_root / 'shared_assets' / 'report_template.html'
+    
+    if not template_path.exists():
+        print(f"[!] 模板文件不存在: {template_path}")
+        return
+    
+    # 计算从报告文件到shared_assets的相对路径
+    report_dir = report_path.parent
+    shared_assets_dir = project_root / 'shared_assets'
+    try:
+        relative_path = os.path.relpath(shared_assets_dir, report_dir)
+        css_path = f"{relative_path}/report_styles.css".replace('\\', '/')
+        js_path = f"{relative_path}/report_scripts.js".replace('\\', '/')
+    except ValueError:
+        # 如果无法计算相对路径，使用默认路径
+        css_path = "shared_assets/report_styles.css"
+        js_path = "shared_assets/report_scripts.js"
+    
+    # 按替换规则归类
+    rule_groups = {}
+    for change in changes_log:
+        # 提取高亮的原文和替换文本
+        original_match = re.search(r'<span class="highlight">([^<]+)</span>', change['original'])
+        modified_match = re.search(r'<span class="highlight">([^<]+)</span>', change['modified'])
+        
+        if original_match and modified_match:
+            original_text = original_match.group(1)
+            replacement_text = modified_match.group(1)
+            rule_key = f"{original_text} → {replacement_text}"
+            
+            if rule_key not in rule_groups:
+                rule_groups[rule_key] = {
+                    'original_text': original_text,
+                    'replacement_text': replacement_text,
+                    'instances': []
+                }
+            
+            rule_groups[rule_key]['instances'].append(change)
+    
+    # 按实例数量排序
+    sorted_rule_groups = sorted(rule_groups.values(), key=lambda x: len(x['instances']), reverse=True)
+    total_instances = sum(len(group['instances']) for group in sorted_rule_groups)
+    
+    # 读取模板文件
+    template_content = template_path.read_text(encoding='utf-8')
+    
+    # 生成规则列表项
+    rules_list_items = ""
+    for i, group in enumerate(sorted_rule_groups):
+        rules_list_items += f'''
+                    <div class="rule-list-item" onclick="jumpToRule({i})">
+                        <div class="rule-text">
+                            <span class="rule-original">{html.escape(group["original_text"])}</span> → 
+                            <span class="rule-replacement">{html.escape(group["replacement_text"])}</span>
+                        </div>
+                        <div class="rule-count">{len(group["instances"])} 次</div>
+                    </div>
+        '''
+    
+    # 生成内容区域
+    content_sections = ""
+    for group_index, group in enumerate(sorted_rule_groups):
+        instance_count = len(group['instances'])
+        content_sections += f'''
+            <div class="rule-group" data-group-index="{group_index}">
+                <div class="rule-header" onclick="toggleInstances({group_index})">
+                    <div class="rule-title">
+                        <span class="rule-badge">{instance_count} 次</span>
+                        <span class="toggle-icon" id="toggle-{group_index}">▼</span>
+                    </div>
+                    <div class="rule-description">
+                        <span><strong>{html.escape(group['original_text'])}</strong></span>
+                        <span class="rule-arrow">→</span>
+                        <span><strong>{html.escape(group['replacement_text'])}</strong></span>
+                    </div>
+                </div>
+                <div class="instances-container" id="instances-{group_index}">
+        '''
+        
+        # 按位置排序实例
+        sorted_instances = sorted(group['instances'], key=lambda x: x.get('position', 0))
+        
+        for instance in sorted_instances:
+            content_sections += f'''
+                    <div class="instance-item">
+                        <div class="instance-content">
+                            <div class="original-section">
+                                <div class="section-title">原文</div>
+                                <div class="text-content">{instance['original']}</div>
+                            </div>
+                            <div class="modified-section">
+                                <div class="section-title">修改后</div>
+                                <div class="text-content">{instance['modified']}</div>
+                            </div>
+                        </div>
+                    </div>
+            '''
+        
+        content_sections += '''
+                </div>
+            </div>
+        '''
+    
+    # 替换模板中的占位符
+    html_content = template_content.replace('{{source_filename}}', html.escape(source_filename))
+    html_content = html_content.replace('{{rules_count}}', str(len(sorted_rule_groups)))
+    html_content = html_content.replace('{{total_instances}}', str(total_instances))
+    html_content = html_content.replace('{{rules_list_items}}', rules_list_items)
+    html_content = html_content.replace('{{content_sections}}', content_sections)
+    html_content = html_content.replace('{{generation_time}}', html.escape(str(__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S'))))
+    
+    # 替换CSS和JS文件路径
+    html_content = html_content.replace('href="shared_assets/report_styles.css"', f'href="{css_path}"')
+    html_content = html_content.replace('src="shared_assets/report_scripts.js"', f'src="{js_path}"')
+    
     try:
         report_path.write_text(html_content, encoding='utf-8')
+        print(f"[✓] 报告已生成: {report_path}")
+    except Exception as e:
+        print(f"[!] 无法写入报告文件 {report_path}: {e}")
+        
+    try:
+        report_path.write_text(html_content, encoding='utf-8')
+        print(f"[✓] 报告已生成: {report_path}")
     except Exception as e:
         print(f"[!] 无法写入报告文件 {report_path}: {e}")
 
@@ -176,8 +259,9 @@ def process_txt_file(file_path: Path, rules: pd.DataFrame, processed_dir: Path, 
         processed_paragraphs = []
         changes_log_for_report = []
         file_was_modified = False
+        current_position = 0  # 记录当前在原文中的位置
 
-        for p_original in paragraphs:
+        for paragraph_index, p_original in enumerate(paragraphs):
             p_modified, atomic_changes = process_and_get_changes(p_original, rules)
             processed_paragraphs.append(p_modified)
 
@@ -194,8 +278,11 @@ def process_txt_file(file_path: Path, rules: pd.DataFrame, processed_dir: Path, 
                 
                 changes_log_for_report.append({
                     'original': original_report.replace('\n', '<br>'),
-                    'modified': modified_report.replace('\n', '<br>')
+                    'modified': modified_report.replace('\n', '<br>'),
+                    'position': current_position + paragraph_index  # 添加位置信息
                 })
+            
+            current_position += len(p_original) + 2  # +2 for \n\n separator
 
         if file_was_modified:
             new_content = "\n\n".join(processed_paragraphs)
@@ -215,6 +302,7 @@ def process_epub_file(file_path: Path, rules: pd.DataFrame, processed_dir: Path,
         book = epub.read_epub(str(file_path))
         changes_log = []
         book_is_modified = False
+        global_position = 0  # 记录全局位置
 
         for item in book.get_items_of_type(ITEM_DOCUMENT):
             soup = BeautifulSoup(item.get_content(), 'xml')
@@ -248,8 +336,11 @@ def process_epub_file(file_path: Path, rules: pd.DataFrame, processed_dir: Path,
                     
                     changes_log.append({
                         'original': original_report,
-                        'modified': modified_report
+                        'modified': modified_report,
+                        'position': global_position  # 添加位置信息
                     })
+                
+                global_position += len(p_text_original)  # 更新全局位置
 
             if item_is_modified:
                 item.set_content(str(soup).encode('utf-8'))
