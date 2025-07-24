@@ -101,29 +101,104 @@ def print_progress_bar(iteration, total, prefix='进度', suffix='完成', lengt
 # 样式配置
 STYLE_OPTIONS = {
     "1": {
-        "name": "经典简约",
+        "name": "经典简约样式",
         "description": "标准电子书排版，适合大多数小说和文学作品",
         "file": "epub_style_classic.css"
     },
     "2": {
-        "name": "温馨护眼",
+        "name": "温馨护眼样式",
         "description": "温暖色调，舒适行距，减少眼部疲劳，适合长时间阅读",
         "file": "epub_style_warm.css"
     },
     "3": {
-        "name": "现代清新",
+        "name": "现代清新样式",
         "description": "左对齐标题，现代感强，适合技术文档和现代文学",
         "file": "epub_style_modern.css"
     },
     "4": {
-        "name": "优雅古典",
+        "name": "优雅古典样式",
         "description": "古典风格，适合古典文学、诗词和传统文化类书籍",
         "file": "epub_style_elegant.css"
     },
     "5": {
-        "name": "简洁现代",
+        "name": "简洁现代样式",
         "description": "极简设计，适合商务文档和学术论文",
         "file": "epub_style_minimal.css"
+    },
+    "6": {
+        "name": "灰度层次样式",
+        "description": "灰度配色方案，层次分明，适合专业文档",
+        "file": "epub_style_grayscale.css"
+    },
+    "7": {
+        "name": "单色极简样式",
+        "description": "单色设计，极简风格，适合现代阅读体验",
+        "file": "epub_style_monochrome.css"
+    },
+    "8": {
+        "name": "护眼低对比样式",
+        "description": "低对比度设计，保护视力，适合长时间阅读",
+        "file": "epub_style_eyecare.css"
+    },
+    "9": {
+        "name": "高对比度样式",
+        "description": "高对比度设计，清晰易读，适合视力不佳的读者",
+        "file": "epub_style_contrast.css"
+    },
+    "10": {
+        "name": "柔和圆润样式",
+        "description": "圆润设计，柔和视觉效果，适合休闲阅读",
+        "file": "epub_style_soft.css"
+    },
+    "11": {
+        "name": "现代极简样式",
+        "description": "现代极简设计，简洁大方，适合现代文学",
+        "file": "epub_style_minimal_modern.css"
+    },
+    "12": {
+        "name": "黑白简约样式",
+        "description": "黑白配色，简约设计，适合经典文学作品",
+        "file": "epub_style_clean.css"
+    },
+    "13": {
+        "name": "几何极简样式",
+        "description": "几何元素，极简设计，适合现代艺术类书籍",
+        "file": "epub_style_geometric.css"
+    },
+    "14": {
+        "name": "极简线性样式",
+        "description": "线性设计，极简风格，适合技术文档",
+        "file": "epub_style_minimal_linear.css"
+    },
+    "15": {
+        "name": "纯净极简样式",
+        "description": "纯净设计，极简风格，适合学术论文",
+        "file": "epub_style_minimal_grid.css"
+    },
+    "16": {
+        "name": "几何框架样式",
+        "description": "几何框架设计，现代感强，适合设计类书籍",
+        "file": "epub_style_geometric_frame.css"
+    },
+    "17": {
+        "name": "简约网格样式",
+        "description": "网格布局，简约设计，适合技术手册",
+        "file": "epub_style_fantasy.css"
+    },
+    "18": {
+        "name": "线条层次样式",
+        "description": "线条层次设计，清晰结构，适合教育类书籍",
+        "file": "epub_style_line_hierarchy.css"
+    },
+    "19": {
+        "name": "线性极简样式",
+        "description": "线性极简设计，现代风格，适合商务文档",
+        "file": "epub_style_linear.css"
+    },
+    "20": {
+        "name": "结构化简约样式",
+        "description": "结构化设计，简约风格，适合学术研究",
+        "file": "epub_style_structured_minimal.css"
     }
 }
 
@@ -132,27 +207,42 @@ def select_epub_style():
     print("\n" + "="*60)
     print("📚 选择电子书样式")
     print("="*60)
-    print("\n🎨 可用样式:\n")
+    print("\n🎨 可用样式:")
     
-    for key, style in STYLE_OPTIONS.items():
-        print(f"{key}. {style['name']}")
-        print(f"   📖 {style['description']}")
-        print()
+    # 分组显示，每行显示2个样式
+    items = list(STYLE_OPTIONS.items())
+    for i in range(0, len(items), 2):
+        line = ""
+        for j in range(2):
+            if i + j < len(items):
+                key, style = items[i + j]
+                line += f"{key:>2}. {style['name']:<20}"
+                if j == 0 and i + j + 1 < len(items):  # 不是最后一个且不是行末
+                    line += "  "
+        print(line)
     
-    print("💡 提示: 输入 'p' 或 'preview' 可以打开样式预览页面")
-    print()
+    print("\n💡 提示: 输入 'p' 预览所有样式")
     
     while True:
-        choice = input("请选择样式 (1-5，默认为1，p=预览): ").strip().lower()
+        choice = input("请选择样式 (1-20，默认为1，p=预览): ").strip().lower()
         if not choice:
             choice = "1"
         
         # 处理预览请求
         if choice in ['p', 'preview']:
             open_style_preview()
-            print("\n🎨 可用样式:\n")
-            for key, style in STYLE_OPTIONS.items():
-                print(f"{key}. {style['name']} - {style['description']}")
+            print("\n🎨 可用样式:")
+            # 分组显示，每行显示2个样式
+            items = list(STYLE_OPTIONS.items())
+            for i in range(0, len(items), 2):
+                line = ""
+                for j in range(2):
+                    if i + j < len(items):
+                        key, style = items[i + j]
+                        line += f"{key:>2}. {style['name']:<20}"
+                        if j == 0 and i + j + 1 < len(items):  # 不是最后一个且不是行末
+                            line += "  "
+                print(line)
             print()
             continue
         
@@ -161,7 +251,7 @@ def select_epub_style():
             print(f"\n✅ 已选择样式: {selected_style['name']}")
             return selected_style['file']
         else:
-            print("❌ 无效选择，请输入1-5之间的数字，或输入 'p' 查看预览")
+            print("❌ 无效选择，请输入1-20之间的数字，或输入 'p' 查看预览")
 
 def open_style_preview():
     """打开样式预览页面"""
