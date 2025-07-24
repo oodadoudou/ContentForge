@@ -45,6 +45,96 @@ STYLE_OPTIONS = {
         "description": "极简设计，适合商务文档和学术论文",
         "file": "epub_style_minimal.css",
         "features": ["极简设计", "大写标题", "字母间距", "专业外观"]
+    },
+    "6": {
+        "name": "清洁简约",
+        "description": "干净简洁的设计，适合现代阅读体验",
+        "file": "epub_style_clean.css",
+        "features": ["简洁布局", "清晰字体", "舒适间距", "现代感"]
+    },
+    "7": {
+        "name": "高对比度",
+        "description": "高对比度设计，提升可读性，适合视力辅助",
+        "file": "epub_style_contrast.css",
+        "features": ["高对比度", "清晰可读", "视力友好", "强调重点"]
+    },
+    "8": {
+        "name": "护眼专用",
+        "description": "专为长时间阅读设计，减少眼部疲劳",
+        "file": "epub_style_eyecare.css",
+        "features": ["护眼色调", "柔和背景", "舒适字体", "减少疲劳"]
+    },
+    "9": {
+        "name": "奇幻风格",
+        "description": "富有想象力的设计，适合奇幻小说和创意作品",
+        "file": "epub_style_fantasy.css",
+        "features": ["奇幻装饰", "创意元素", "丰富色彩", "想象空间"]
+    },
+    "10": {
+        "name": "几何设计",
+        "description": "现代几何元素，适合设计类和技术类书籍",
+        "file": "epub_style_geometric.css",
+        "features": ["几何图案", "现代设计", "结构清晰", "视觉冲击"]
+    },
+    "11": {
+        "name": "几何边框",
+        "description": "带有几何边框的精美设计",
+        "file": "epub_style_geometric_frame.css",
+        "features": ["几何边框", "精美装饰", "现代感", "结构美"]
+    },
+    "12": {
+        "name": "灰度经典",
+        "description": "经典灰度设计，专业而优雅",
+        "file": "epub_style_grayscale.css",
+        "features": ["灰度色调", "经典设计", "专业外观", "优雅简约"]
+    },
+    "13": {
+        "name": "层次分明",
+        "description": "清晰的层次结构，适合学术和技术文档",
+        "file": "epub_style_line_hierarchy.css",
+        "features": ["层次清晰", "结构分明", "学术风格", "专业排版"]
+    },
+    "14": {
+        "name": "线性设计",
+        "description": "简洁的线性布局，现代感十足",
+        "file": "epub_style_linear.css",
+        "features": ["线性布局", "简洁设计", "现代风格", "流畅阅读"]
+    },
+    "15": {
+        "name": "网格极简",
+        "description": "基于网格系统的极简设计",
+        "file": "epub_style_minimal_grid.css",
+        "features": ["网格布局", "极简风格", "系统化", "整齐有序"]
+    },
+    "16": {
+        "name": "线性极简",
+        "description": "线性极简主义设计风格",
+        "file": "epub_style_minimal_linear.css",
+        "features": ["线性极简", "纯净设计", "专注内容", "无干扰"]
+    },
+    "17": {
+        "name": "现代极简",
+        "description": "现代极简主义，突出内容本质",
+        "file": "epub_style_minimal_modern.css",
+        "features": ["现代极简", "内容为王", "纯净体验", "专业感"]
+    },
+    "18": {
+        "name": "单色设计",
+        "description": "单色调设计，专注于内容表达",
+        "file": "epub_style_monochrome.css",
+        "features": ["单色调", "专注内容", "简洁纯净", "经典永恒"]
+    },
+    "19": {
+        "name": "柔和舒适",
+        "description": "柔和的色调和舒适的阅读体验",
+        "file": "epub_style_soft.css",
+        "features": ["柔和色调", "舒适阅读", "温和设计", "放松体验"]
+    },
+    "20": {
+        "name": "结构极简",
+        "description": "结构化的极简设计，清晰有序",
+        "file": "epub_style_structured_minimal.css",
+        "features": ["结构清晰", "极简有序", "逻辑分明", "专业布局"]
     }
 }
 
@@ -55,11 +145,20 @@ def display_styles():
     print("="*60)
     print("\n🎨 可用样式：\n")
     
-    for key, style in STYLE_OPTIONS.items():
-        print(f"{key}. {style['name']}")
-        print(f"   📖 {style['description']}")
-        print(f"   ✨ 特色：{' | '.join(style['features'])}")
-        print()
+    # 简洁的两列显示
+    styles_list = list(STYLE_OPTIONS.items())
+    for i in range(0, len(styles_list), 2):
+        # 左列
+        key1, style1 = styles_list[i]
+        left_col = f"{key1:>2}. {style1['name']:<12}"
+        
+        # 右列（如果存在）
+        if i + 1 < len(styles_list):
+            key2, style2 = styles_list[i + 1]
+            right_col = f"{key2:>2}. {style2['name']:<12}"
+            print(f"{left_col:<30} {right_col}")
+        else:
+            print(left_col)
 
 def get_style_content(style_key):
     """获取指定样式的CSS内容"""
@@ -99,19 +198,19 @@ def preview_style():
         print("❌ 预览文件不存在")
 
 def select_style():
-    """交互式样式选择"""
+    """交互式样式选择，返回选择的样式键"""
     while True:
         display_styles()
         print("🔧 操作选项:")
-        print("1-5: 选择样式")
+        print("1-20: 选择样式")
         print("p: 预览所有样式")
         print("q: 退出")
         
-        choice = input("\n请选择 (1-5/p/q): ").strip().lower()
+        choice = input("\n请选择 (1-20/p/q): ").strip().lower()
         
         if choice == 'q':
             print("👋 再见！")
-            break
+            return None
         elif choice == 'p':
             preview_style()
             input("\n按回车键继续...")
@@ -128,12 +227,17 @@ def select_style():
                 print(css_content[:200] + "..." if len(css_content) > 200 else css_content)
                 print("-" * 50)
                 
-                # 询问是否应用到默认样式
-                apply = input("\n是否将此样式设为默认样式？(y/n): ").strip().lower()
-                if apply == 'y':
-                    apply_default_style(choice)
+                # 询问是否确认选择
+                confirm = input("\n确认选择此样式？(回车/y确认，n重选): ").strip().lower()
+                if confirm == 'y' or confirm == '':
+                    print(f"\n🎉 样式选择完成！将使用 '{style['name']}' 样式生成EPUB")
+                    return choice
+                elif confirm == 'n':
+                    print("\n🔄 重新选择...")
+                    continue
+                else:
+                    print("\n❌ 请输入 y 或 n（直接回车默认为确定）")
             
-            input("\n按回车键继续...")
         else:
             print("❌ 无效选择，请重试")
             input("按回车键继续...")

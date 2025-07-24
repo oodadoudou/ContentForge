@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>静读天下阅读器 - EPUB样式适配预览</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            margin: 0 0 10px 0;
+        }
+        
+        .header p {
+            color: #7f8c8d;
+            margin: 0;
+        }
+        
+        .styles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .style-preview {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+        
+        .style-preview:hover {
+            transform: translateY(-5px);
+        }
+        
+        .style-header {
+            background: #34495e;
+            color: white;
+            padding: 15px 20px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .style-content {
+            padding: 25px;
+            height: 400px;
+            overflow-y: auto;
+        }
+        
+        /* 统一字体大小设置 */
+        .style-content * {
+            font-size: 14px !important;
+            line-height: 1.6 !important;
+        }
+        
+        .style-content h1 {
+            font-size: 18px !important;
+        }
+        
+        .style-content h2 {
+            font-size: 16px !important;
+        }
+        
+        .style-content h3 {
+            font-size: 15px !important;
+        }
+        
+        /* 1. 灰度层次样式 - 适配版 (moonreader_epub_style_grayscale.css) */
+        .moonreader-grayscale {
+            font-size: 1em;
+            line-height: 1.8;
+            margin: 3% 5%;
+            color: #2c2c2c;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-grayscale h1 {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin: 3em 0 1.5em 0;
+            text-align: center;
+            color: #1a1a1a;
+            line-height: 1.3;
+            text-indent: 0;
+            border-bottom: 3px solid #666666;
+            padding-bottom: 15px;
+        }
+        .moonreader-grayscale h2 {
+            font-size: 1.1em;
+            font-weight: 500;
+            margin: 2.5em 0 1.2em 0;
+            color: #333333;
+            text-align: left;
+            line-height: 1.4;
+            text-indent: 0;
+            padding: 15px 0;
+            border-top: 1px solid #999999;
+            border-bottom: 1px solid #999999;
+        }
+        .moonreader-grayscale p {
+            font-size: 1em;
+            margin-top: 0;
+            margin-bottom: 1.2em;
+            text-indent: 2em;
+            color: #444444;
+            line-height: 1.8;
+            orphans: 2;
+            widows: 2;
+        }
+        
+        /* 2. 线条层次样式 - 适配版 (moonreader_epub_style_line_hierarchy.css) */
+        .moonreader-line-hierarchy {
+            font-size: 1em;
+            line-height: 1.7;
+            margin: 3% 5%;
+            color: #2a2a2a;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-line-hierarchy h1 {
+            font-size: 1.3em;
+            font-weight: 400;
+            margin: 3em 0 1.5em 0;
+            text-align: center;
+            color: #1a1a1a;
+            line-height: 1.3;
+            text-indent: 0;
+            padding: 30px 0;
+            border-top: 2px solid #333333;
+            border-bottom: 2px solid #333333;
+        }
+        .moonreader-line-hierarchy h2 {
+            font-size: 1.1em;
+            font-weight: 500;
+            margin: 2.5em 0 1.2em 0;
+            color: #2a2a2a;
+            text-align: left;
+            line-height: 1.4;
+            text-indent: 0;
+            padding: 10px 0 10px 20px;
+            border-left: 4px solid #555555;
+        }
+        .moonreader-line-hierarchy p {
+            font-size: 1em;
+            margin-top: 0;
+            margin-bottom: 1.3em;
+            text-indent: 2em;
+            orphans: 2;
+            widows: 2;
+            color: #444444;
+            line-height: 1.7;
+        }
+        
+        /* 3. 线性极简样式 - 适配版 (moonreader_epub_style_linear.css) */
+        .moonreader-linear {
+            font-size: 1em;
+            line-height: 1.9;
+            margin: 3% 5%;
+            color: #1a1a1a;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-linear h1 {
+            font-size: 1.3em;
+            font-weight: 100;
+            margin: 5em 0 2.5em 0;
+            text-align: left;
+            color: #ffffff;
+            line-height: 1.0;
+            text-indent: 0;
+            padding: 50px 0 50px 60px;
+            background: #1a1a1a;
+            border: 2px solid #333333;
+        }
+        .moonreader-linear h2 {
+            font-size: 1.1em;
+            font-weight: 200;
+            margin: 4em 0 2em 0;
+            color: #111111;
+            text-align: right;
+            line-height: 1.1;
+            text-indent: 0;
+            padding: 40px 60px 40px 0;
+            background: #f0f0f0;
+            border-right: 8px solid #222222;
+            border-top: 1px solid #e0e0e0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .moonreader-linear p {
+            font-size: 1em;
+            margin-top: 0;
+            margin-bottom: 1.4em;
+            text-indent: 0;
+            color: #1a1a1a;
+            line-height: 1.9;
+            padding-left: 20px;
+            border-left: 2px solid #cccccc;
+        }
+        
+        /* 4. 简约网格样式 - 适配版 (moonreader_epub_style_minimal_grid.css) */
+        .moonreader-minimal-grid {
+            font-size: 16px;
+            line-height: 1.7;
+            margin: 3% 5%;
+            color: #2c2c2c;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-minimal-grid h1 {
+            font-size: 24px;
+            font-weight: 500;
+            margin: 3em 0 1.5em 0;
+            text-align: center;
+            color: #1a1a1a;
+            line-height: 1.3;
+            text-indent: 0;
+            padding: 25px;
+            border: 2px solid #666666;
+        }
+        .moonreader-minimal-grid h2 {
+            font-size: 20px;
+            font-weight: 400;
+            margin: 2.5em 0 1.2em 0;
+            color: #2a2a2a;
+            text-align: left;
+            line-height: 1.4;
+            text-indent: 0;
+            padding: 15px 20px;
+            border: 1px solid #888888;
+        }
+        .moonreader-minimal-grid p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.4em;
+            text-indent: 2em;
+            color: #444444;
+            line-height: 1.7;
+        }
+        
+        /* 5. 极简线性样式 - 适配版 (moonreader_epub_style_minimal_linear.css) */
+        .moonreader-minimal-linear {
+            font-size: 16px;
+            line-height: 1.8;
+            margin: 3% 5%;
+            color: #2c2c2c;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-minimal-linear h1 {
+            font-size: 24px;
+            font-weight: 200;
+            margin: 4em 0 2em 0;
+            text-align: center;
+            color: #1a1a1a;
+            line-height: 1.2;
+            text-indent: 0;
+            padding: 30px 0;
+            border-top: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+        }
+        .moonreader-minimal-linear h2 {
+            font-size: 20px;
+            font-weight: 300;
+            margin: 3em 0 1.5em 0;
+            color: #333333;
+            text-align: left;
+            line-height: 1.3;
+            text-indent: 0;
+            padding: 10px 0;
+            border-bottom: 1px dotted #ccc;
+        }
+        .moonreader-minimal-linear p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.6em;
+            text-indent: 2em;
+            color: #444444;
+            line-height: 1.8;
+        }
+        
+        /* 6. 现代极简样式 - 适配版 (moonreader_epub_style_minimal_modern.css) */
+        .moonreader-minimal-modern {
+            font-size: 16px;
+            line-height: 1.8;
+            margin: 4% 6%;
+            color: #2c3e50;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-minimal-modern h1 {
+            font-size: 24px;
+            font-weight: 300;
+            margin: 4em 0 2em 0;
+            text-align: center;
+            color: #34495e;
+            line-height: 1.2;
+            text-indent: 0;
+            border-bottom: 1px solid #34495e;
+            padding-bottom: 10px;
+        }
+        .moonreader-minimal-modern h2 {
+            font-size: 20px;
+            font-weight: 400;
+            margin: 3em 0 1.5em 0;
+            color: #2c3e50;
+            text-align: left;
+            line-height: 1.3;
+            text-indent: 0;
+            padding-left: 20px;
+            border-left: 3px solid #34495e;
+        }
+        .moonreader-minimal-modern p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.5em;
+            text-indent: 2em;
+            orphans: 2;
+            widows: 2;
+        }
+        
+        /* 7. 简洁现代样式 - 适配版 (moonreader_epub_style_minimal.css) */
+        .moonreader-minimal {
+            font-size: 16px;
+            line-height: 1.7;
+            margin: 3% 5%;
+            color: #333;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-minimal h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 3em 0 1.5em 0;
+            text-align: center;
+            color: #2c3e50;
+            line-height: 1.3;
+            text-indent: 0;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        .moonreader-minimal h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 2.5em 0 1.2em 0;
+            color: #34495e;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 0.3em;
+            line-height: 1.4;
+            text-indent: 0;
+        }
+        .moonreader-minimal p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.2em;
+            text-indent: 2em;
+            orphans: 2;
+            widows: 2;
+        }
+        
+        /* 8. 现代清新样式 - 适配版 (moonreader_epub_style_modern.css) */
+        .moonreader-modern {
+            font-size: 16px;
+            line-height: 1.7;
+            margin: 3% 5%;
+            color: #2c3e50;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-modern h1 {
+            font-size: 24px;
+            font-weight: 300;
+            margin: 3em 0 1.5em 0;
+            text-align: left;
+            color: #2a2a2a;
+            border-left: 4px solid #555555;
+            padding-left: 15px;
+            line-height: 1.3;
+            text-indent: 0;
+        }
+        .moonreader-modern h2 {
+            font-size: 20px;
+            font-weight: 400;
+            margin: 2.5em 0 1.2em 0;
+            color: #3a3a3a;
+            border-left: 3px solid #666666;
+            padding-left: 12px;
+            line-height: 1.4;
+            text-indent: 0;
+        }
+        .moonreader-modern p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.2em;
+            text-indent: 2em;
+            orphans: 2;
+            widows: 2;
+        }
+        
+        /* 9. 单色极简样式 - 适配版 (moonreader_epub_style_monochrome.css) */
+        .moonreader-monochrome {
+            font-size: 16px;
+            line-height: 1.8;
+            margin: 4% 6%;
+            color: #333333;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-monochrome h1 {
+            font-size: 24px;
+            font-weight: 300;
+            margin: 3em 0 1.5em 0;
+            text-align: left;
+            color: #000000;
+            border-bottom: 3px double #666666;
+            padding-bottom: 15px;
+            line-height: 1.2;
+            text-indent: 0;
+        }
+        .moonreader-monochrome h2 {
+            font-size: 20px;
+            font-weight: 400;
+            margin: 2.5em 0 1.2em 0;
+            color: #1a1a1a;
+            text-align: center;
+            border-top: 1px solid #888888;
+            border-bottom: 1px solid #888888;
+            padding: 12px 0;
+            line-height: 1.4;
+            text-indent: 0;
+        }
+        .moonreader-monochrome p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.3em;
+            text-indent: 2em;
+            orphans: 2;
+            widows: 2;
+        }
+        
+        /* 10. 柔和圆润样式 - 适配版 (moonreader_epub_style_soft.css) */
+        .moonreader-soft {
+            font-size: 16px;
+            line-height: 1.8;
+            margin: 4% 6%;
+            color: #444444;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-soft h1 {
+            font-size: 24px;
+            font-weight: 400;
+            margin: 3em 0 1.5em 0;
+            text-align: center;
+            color: #2c2c2c;
+            padding: 25px;
+            line-height: 1.4;
+            text-indent: 0;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+        }
+        .moonreader-soft h2 {
+            font-size: 20px;
+            font-weight: 500;
+            margin: 2.5em 0 1.2em 0;
+            color: #3a3a3a;
+            padding: 15px 20px;
+            line-height: 1.5;
+            text-indent: 0;
+            background: #f5f5f5;
+            border-left: 4px solid #888888;
+        }
+        .moonreader-soft p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.5em;
+            text-indent: 2em;
+            orphans: 2;
+            widows: 2;
+        }
+        
+        /* 11. 结构化简约样式 - 适配版 (moonreader_epub_style_structured_minimal.css) */
+        .moonreader-structured-minimal {
+            font-size: 16px;
+            line-height: 1.8;
+            margin: 3% 5%;
+            color: #2c2c2c;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-structured-minimal h1 {
+            font-size: 24px;
+            font-weight: 400;
+            margin: 4em 0 2em 0;
+            text-align: center;
+            color: #1a1a1a;
+            line-height: 1.2;
+            text-indent: 0;
+            padding: 40px 30px;
+            border: 1px solid #e0e0e0;
+            background: #fafafa;
+        }
+        .moonreader-structured-minimal h2 {
+            font-size: 20px;
+            font-weight: 500;
+            margin: 3em 0 1.5em 0;
+            color: #2a2a2a;
+            text-align: left;
+            line-height: 1.3;
+            text-indent: 0;
+            padding: 20px 0 20px 30px;
+            background: #f8f8f8;
+            border-left: 2px solid #333333;
+        }
+        .moonreader-structured-minimal p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.6em;
+            text-indent: 2em;
+            color: #444444;
+            line-height: 1.8;
+        }
+        
+        /* 12. 温馨护眼样式 - 适配版 (moonreader_epub_style_warm.css) */
+        .moonreader-warm {
+            font-size: 16px;
+            line-height: 1.7;
+            margin: 3% 5%;
+            color: #4a4a4a;
+            text-align: justify;
+            padding: 0;
+            widows: 2;
+            orphans: 2;
+        }
+        .moonreader-warm h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 3em 0 1.5em 0;
+            text-align: center;
+            color: #2a2a2a;
+            line-height: 1.3;
+            text-indent: 0;
+            border-bottom: 2px solid #666666;
+            padding-bottom: 10px;
+        }
+        .moonreader-warm h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 2.5em 0 1.2em 0;
+            color: #3a3a3a;
+            text-align: center;
+            line-height: 1.4;
+            text-indent: 0;
+            border-bottom: 1px solid #777777;
+            padding-bottom: 5px;
+        }
+        .moonreader-warm p {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 1.2em;
+            text-indent: 2em;
+            orphans: 2;
+            widows: 2;
+        }
+        
+        /* 通用样式 */
+        .moonreader-grayscale p.no-indent,
+        .moonreader-line-hierarchy p.no-indent,
+        .moonreader-linear p.no-indent,
+        .moonreader-minimal-grid p.no-indent,
+        .moonreader-minimal-linear p.no-indent,
+        .moonreader-minimal-modern p.no-indent,
+        .moonreader-minimal p.no-indent,
+        .moonreader-modern p.no-indent,
+        .moonreader-monochrome p.no-indent,
+        .moonreader-soft p.no-indent,
+        .moonreader-structured-minimal p.no-indent,
+        .moonreader-warm p.no-indent {
+            text-indent: 0;
+        }
+        
+        .moonreader-grayscale img,
+        .moonreader-line-hierarchy img,
+        .moonreader-linear img,
+        .moonreader-minimal-grid img,
+        .moonreader-minimal-linear img,
+        .moonreader-minimal-modern img,
+        .moonreader-minimal img,
+        .moonreader-modern img,
+        .moonreader-monochrome img,
+        .moonreader-soft img,
+        .moonreader-structured-minimal img,
+        .moonreader-warm img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 15px auto;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>静读天下阅读器 - EPUB样式适配预览</h1>
+    </div>
+    
+    <div class="styles-grid">
+        
+        <!-- 1. 灰度层次样式 -->
+        <div class="style-preview">
+            <div class="style-header">1. 灰度层次样式 🌫️ (moonreader_epub_style_grayscale.css)</div>
+            <div class="style-content moonreader-grayscale">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 2. 线条层次样式 -->
+        <div class="style-preview">
+            <div class="style-header">2. 线条层次样式 📏 (moonreader_epub_style_line_hierarchy.css)</div>
+            <div class="style-content moonreader-line-hierarchy">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 3. 线性极简样式 -->
+        <div class="style-preview">
+            <div class="style-header">3. 线性极简样式 ➖ (moonreader_epub_style_linear.css)</div>
+            <div class="style-content moonreader-linear">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 4. 简约网格样式 -->
+        <div class="style-preview">
+            <div class="style-header">4. 简约网格样式 ⚏ (moonreader_epub_style_minimal_grid.css)</div>
+            <div class="style-content moonreader-minimal-grid">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 5. 极简线性样式 -->
+        <div class="style-preview">
+            <div class="style-header">5. 极简线性样式 ⚡ (moonreader_epub_style_minimal_linear.css)</div>
+            <div class="style-content moonreader-minimal-linear">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 6. 现代极简样式 -->
+        <div class="style-preview">
+            <div class="style-header">6. 现代极简样式 🔷 (moonreader_epub_style_minimal_modern.css)</div>
+            <div class="style-content moonreader-minimal-modern">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 7. 简洁现代样式 -->
+        <div class="style-preview">
+            <div class="style-header">7. 简洁现代样式 ⚡ (moonreader_epub_style_minimal.css)</div>
+            <div class="style-content moonreader-minimal">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 8. 现代清新样式 -->
+        <div class="style-preview">
+            <div class="style-header">8. 现代清新样式 🌊 (moonreader_epub_style_modern.css)</div>
+            <div class="style-content moonreader-modern">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 9. 单色极简样式 -->
+        <div class="style-preview">
+            <div class="style-header">9. 单色极简样式 ⚫ (moonreader_epub_style_monochrome.css)</div>
+            <div class="style-content moonreader-monochrome">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+
+        <!-- 10. 柔和圆润样式 -->
+        <div class="style-preview">
+            <div class="style-header">10. 柔和圆润样式 🌸 (moonreader_epub_style_soft.css)</div>
+            <div class="style-content moonreader-soft">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+        
+        <!-- 11. 结构化简约样式 -->
+        <div class="style-preview">
+            <div class="style-header">11. 结构化简约样式 🏗️ (moonreader_epub_style_structured_minimal.css)</div>
+            <div class="style-content moonreader-structured-minimal">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+        
+        <!-- 12. 温馨护眼样式 -->
+        <div class="style-preview">
+            <div class="style-header">12. 温馨护眼样式 🌅 (moonreader_epub_style_warm.css)</div>
+            <div class="style-content moonreader-warm">
+                <h1>第一章 开始的故事</h1>
+                <p>这是一个关于勇气与梦想的故事。在遥远的古代，有一个美丽的王国，那里的人们过着安详宁静的生活。然而，一场突如其来的变故打破了这份宁静。</p>
+                <h2>1.1 神秘的预言</h2>
+                <p>古老的预言书中记载着一个传说：当黑暗降临大地时，会有一位勇士出现，他将带领人们走向光明。这个预言在王国中流传了数百年，但没有人真正相信它会成为现实。</p>
+                <p>直到那一天，天空突然变得昏暗，邪恶的力量开始侵蚀这片土地。人们这才意识到，预言中的时刻已经到来。</p>
+            </div>
+        </div>
+        
+
+        
+    </div>
+</body>
+</html>
