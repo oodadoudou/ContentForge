@@ -1,0 +1,59 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="id" version="3.0" prefix="rendition: http://www.idpf.org/vocab/rendition/#">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <meta property="dcterms:modified">2025-07-25T00:53:10Z</meta>
+    <meta name="generator" content="Ebook-lib 0.19.0"/>
+    <dc:identifier id="id">id_邂逅.zh_1750813904.8646417</dc:identifier>
+    <dc:title>邂逅.zh</dc:title>
+    <dc:language>zh</dc:language>
+    <dc:creator id="creator">未知作者</dc:creator>
+    <meta name="cover" content="cover-img"></meta>
+  </metadata>
+  <manifest>
+    <item href="cover.jpg" id="cover-img" media-type="image/jpeg" properties="cover-image"/>
+    <item href="cover.xhtml" id="cover" media-type="application/xhtml+xml"/>
+    <item href="style/default.css" id="style_default" media-type="text/css"/>
+    <item href="toc.ncx" id="ncx" media-type="application/x-dtbncx+xml"/>
+    <item href="nav.xhtml" id="nav" media-type="application/xhtml+xml" properties="nav"/>
+    <item href="chap_0.xhtml" id="chapter_0" media-type="application/xhtml+xml"/>
+    <item href="chap_1.xhtml" id="chapter_1" media-type="application/xhtml+xml"/>
+    <item href="chap_2.xhtml" id="chapter_2" media-type="application/xhtml+xml"/>
+    <item href="chap_3.xhtml" id="chapter_3" media-type="application/xhtml+xml"/>
+    <item href="chap_4.xhtml" id="chapter_4" media-type="application/xhtml+xml"/>
+    <item href="chap_5.xhtml" id="chapter_5" media-type="application/xhtml+xml"/>
+    <item href="chap_6.xhtml" id="chapter_6" media-type="application/xhtml+xml"/>
+    <item href="chap_7.xhtml" id="chapter_7" media-type="application/xhtml+xml"/>
+    <item href="chap_8.xhtml" id="chapter_8" media-type="application/xhtml+xml"/>
+    <item href="chap_9.xhtml" id="chapter_9" media-type="application/xhtml+xml"/>
+    <item href="chap_10.xhtml" id="chapter_10" media-type="application/xhtml+xml"/>
+    <item href="chap_11.xhtml" id="chapter_11" media-type="application/xhtml+xml"/>
+    <item href="chap_12.xhtml" id="chapter_12" media-type="application/xhtml+xml"/>
+    <item href="chap_13.xhtml" id="chapter_13" media-type="application/xhtml+xml"/>
+    <item href="chap_14.xhtml" id="chapter_14" media-type="application/xhtml+xml"/>
+    <item href="chap_15.xhtml" id="chapter_15" media-type="application/xhtml+xml"/>
+    <item href="chap_16.xhtml" id="chapter_16" media-type="application/xhtml+xml"/>
+    <item href="chap_17.xhtml" id="chapter_17" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="cover" linear="no"/>
+    <itemref idref="nav"/>
+    <itemref idref="chapter_0"/>
+    <itemref idref="chapter_1"/>
+    <itemref idref="chapter_2"/>
+    <itemref idref="chapter_3"/>
+    <itemref idref="chapter_4"/>
+    <itemref idref="chapter_5"/>
+    <itemref idref="chapter_6"/>
+    <itemref idref="chapter_7"/>
+    <itemref idref="chapter_8"/>
+    <itemref idref="chapter_9"/>
+    <itemref idref="chapter_10"/>
+    <itemref idref="chapter_11"/>
+    <itemref idref="chapter_12"/>
+    <itemref idref="chapter_13"/>
+    <itemref idref="chapter_14"/>
+    <itemref idref="chapter_15"/>
+    <itemref idref="chapter_16"/>
+    <itemref idref="chapter_17"/>
+  </spine>
+</package>

@@ -440,7 +440,56 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
     
     book.toc = epub_toc
     book.add_item(epub.EpubNcx())
-    book.add_item(epub.EpubNav()) 
+    
+    # 创建自定义的导航文件，包含CSS样式引用
+    nav_content = f'''<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="zh" xml:lang="zh">
+  <head>
+    <title>{book_name}</title>
+    <link rel="stylesheet" type="text/css" href="style/default.css"/>
+  </head>
+  <body>
+    <nav epub:type="toc" id="id" role="doc-toc">
+      <h2>{book_name}</h2>
+      <ol>'''
+    
+    for item in epub_toc:
+        if isinstance(item, tuple) and len(item) == 2:
+            # 一级目录
+            link, sub_items = item
+            nav_content += f'''
+        <li>
+          <a href="{link.href}">{link.title}</a>'''
+            if sub_items:
+                nav_content += '\n          <ol>'
+                for sub_link in sub_items:
+                    nav_content += f'''
+            <li>
+              <a href="{sub_link.href}">{sub_link.title}</a>
+            </li>'''
+                nav_content += '\n          </ol>'
+            else:
+                nav_content += '\n          <ol/>'
+            nav_content += '\n        </li>'
+        else:
+            # 单个链接
+            nav_content += f'''
+        <li>
+          <a href="{item.href}">{item.title}</a>
+          <ol/>
+        </li>'''
+    
+    nav_content += '''
+      </ol>
+    </nav>
+  </body>
+</html>'''
+    
+    nav_item = epub.EpubHtml(title='Navigation', file_name='nav.xhtml', lang='zh')
+    nav_item.content = nav_content
+    nav_item.add_item(style_item)
+    book.add_item(nav_item) 
     
     book.spine = ['nav'] + chapters
     if cover_path:

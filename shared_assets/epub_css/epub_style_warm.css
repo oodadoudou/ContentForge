@@ -90,6 +90,8 @@ img {
 }
 
 /* 目录样式 */
+@namespace epub "http://www.idpf.org/2007/ops";
+
 nav[epub|type="toc"] ol {
     padding: 0;
     margin: 0 0 0 2em;
@@ -106,10 +108,35 @@ nav[epub|type="toc"] ol ol {
 }
 nav[epub|type="toc"] a {
     text-decoration: none; /* 默认无下划线 */
-    color: #666666;       /* 深灰色字体 */
+    color: #333333;       /* 更深的灰色字体 */
     font-size: 1.1em;
     line-height: 1.8;
 }
 nav[epub|type="toc"] a:hover {
     text-decoration: underline; /* 鼠标悬停时显示下划线 */
+}
+
+/* 备用选择器，兼容性更好 */
+nav[role="doc-toc"] ol {
+    padding: 0;
+    margin: 0 0 0 2em;
+    list-style-type: none;
+    border-radius: 8px;
+    padding: 15px;
+}
+nav[role="doc-toc"] li {
+    margin: 0;
+    padding: 0;
+}
+nav[role="doc-toc"] ol ol {
+    margin-left: 2em;
+}
+nav[role="doc-toc"] a {
+    text-decoration: none;
+    color: #333333;
+    font-size: 1.1em;
+    line-height: 1.8;
+}
+nav[role="doc-toc"] a:hover {
+    text-decoration: underline;
 }
