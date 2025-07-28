@@ -4,6 +4,8 @@ from collections import deque
 from ebooklib import epub, ITEM_DOCUMENT
 import math
 import json
+import tempfile
+import shutil
 
 # --- 配置 ---
 OUTPUT_DIR_NAME = 'processed_files'
@@ -28,10 +30,23 @@ def get_nav_points(toc):
     return nav_points
 
 
+def get_all_document_items(book):
+    """
+    获取EPUB中所有的文档项目，包括HTML文件等内容文件
+    """
+    document_items = []
+    for item in book.get_items():
+        if item.get_type() == ITEM_DOCUMENT:
+            document_items.append(item)
+    return document_items
+
 def process_epub_file(epub_path, num_splits, output_dir):
     """
     处理单个 EPUB 文件, 将其按章节分割成指定数量的新文件.
     """
+    # 确保输出目录存在
+    os.makedirs(output_dir, exist_ok=True)
+    
     try:
         # 读取原始 EPUB 文件
         original_book = epub.read_epub(epub_path)
@@ -40,31 +55,37 @@ def process_epub_file(epub_path, num_splits, output_dir):
         print(f"[ERROR] 无法读取文件: {os.path.basename(epub_path)}. 错误: {e}")
         return
 
-    # 获取所有章节 (nav points)
+    # 获取所有文档项目（实际内容文件）
+    all_document_items = get_all_document_items(original_book)
+    total_documents = len(all_document_items)
+    print(f"[INFO] 文件共有 {total_documents} 个内容文档.")
+    
+    # 同时获取导航点用于TOC构建
     all_chapters = get_nav_points(original_book.toc)
-    total_chapters = len(all_chapters)
-    print(f"[INFO] 文件共有 {total_chapters} 个章节.")
+    print(f"[INFO] 文件共有 {len(all_chapters)} 个导航章节.")
 
     # 检查分割数是否有效
-    if num_splits > total_chapters:
-        print(f"[ERROR] 分割数 ({num_splits}) 大于总章节数 ({total_chapters}). 跳过此文件.")
+    if num_splits > total_documents:
+        print(f"[ERROR] 分割数 ({num_splits}) 大于总文档数 ({total_documents}). 跳过此文件.")
         return
     if num_splits <= 0:
         print(f"[ERROR] 分割数必须大于 0. 跳过此文件.")
         return
 
-    # 计算每个分割文件应包含的章节数
-    base_size = total_chapters // num_splits
-    remainder = total_chapters % num_splits
+    # 计算每个分割文件应包含的文档数
+    base_size = total_documents // num_splits
+    remainder = total_documents % num_splits
     
     split_sizes = [base_size + 1] * remainder + [base_size] * (num_splits - remainder)
     
-    # 获取所有非章节项目 (如 CSS, 图像, 字体等)
+    # 获取所有非文档项目 (如 CSS, 图像, 字体等)
     non_document_items = [item for item in original_book.get_items() if item.get_type() != ITEM_DOCUMENT]
+    print(f"[INFO] 找到 {len(non_document_items)} 个非文档项目（CSS、图像等）.")
 
-    current_chapter_index = 0
+    current_document_index = 0
     for i, size in enumerate(split_sizes):
         part_num = i + 1
+        print(f"\n[INFO] 正在创建第 {part_num} 部分，包含 {size} 个文档...")
         
         # 创建一个新的 EPUB book 对象
         new_book = epub.EpubBook()
@@ -85,24 +106,35 @@ def process_epub_file(epub_path, num_splits, output_dir):
             new_book.set_language('en')
             print(f"  [WARNING] 原始文件缺少部分元数据, 已使用默认值.")
 
-
-        # --- 添加章节和内容 ---
-        start_index = current_chapter_index
-        end_index = current_chapter_index + size
-        chapters_for_this_part = all_chapters[start_index:end_index]
+        # --- 添加文档内容 ---
+        start_index = current_document_index
+        end_index = current_document_index + size
+        documents_for_this_part = all_document_items[start_index:end_index]
         
-        new_book.toc = chapters_for_this_part
+        print(f"  [INFO] 添加文档 {start_index+1} 到 {end_index}...")
+        
+        # 添加所有文档项目到新书中
         new_book.spine = []
+        for doc_item in documents_for_this_part:
+            new_book.add_item(doc_item)
+            new_book.spine.append(doc_item)
+            print(f"    -> 已添加文档: {doc_item.get_name()}")
 
-        for chapter_link in chapters_for_this_part:
-            item = original_book.get_item_with_href(chapter_link.href)
-            if item:
-                new_book.add_item(item)
-                new_book.spine.append(item)
-
+        # 添加所有非文档项目（CSS、图像等）
         for item in non_document_items:
             new_book.add_item(item)
 
+        # 构建适当的TOC - 只包含与当前部分相关的章节
+        relevant_chapters = []
+        for chapter in all_chapters:
+            # 检查章节是否指向当前部分的文档
+            for doc_item in documents_for_this_part:
+                if chapter.href in doc_item.get_name() or doc_item.get_name() in chapter.href:
+                    relevant_chapters.append(chapter)
+                    break
+        
+        new_book.toc = relevant_chapters if relevant_chapters else all_chapters[:min(len(all_chapters), size)]
+        
         new_book.add_item(epub.EpubNcx())
         new_book.add_item(epub.EpubNav())
 
@@ -113,11 +145,11 @@ def process_epub_file(epub_path, num_splits, output_dir):
 
         try:
             epub.write_epub(output_path, new_book, {})
-            print(f"  -> 已创建: {new_filename}")
+            print(f"  -> 已创建: {new_filename} (包含 {len(documents_for_this_part)} 个文档)")
         except Exception as e:
             print(f"  -> [ERROR] 创建文件失败: {new_filename}. 错误: {e}")
 
-        current_chapter_index = end_index
+        current_document_index = end_index
 
 # --- 新增：函数用于从 settings.json 加载默认路径 ---
 def load_default_path_from_settings():
