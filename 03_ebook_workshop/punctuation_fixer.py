@@ -157,30 +157,29 @@ def generate_report(report_path: Path, changes_log: list, source_filename: str):
 
 def is_main_content(content: str) -> bool:
     """
-    判断文本是否为正文内容，跳过标题、目录、页眉页脚等非正文内容。
+    判断给定内容是否为正文内容
+    排除标题、版权信息、目录、页眉页脚等非正文内容
+    优化后更宽松地识别正文，特别是对话和短句
     """
-    # 去除首尾空白字符
+    if not content or not content.strip():
+        return False
+    
     content = content.strip()
     
-    # 如果内容为空或过短，可能不是正文
-    if len(content) < 10:
+    # 检查是否为明显的标题（包含章节标识且很短且无标点）
+    if len(content) < 8 and any(char in content for char in ['第', '章', '节', '篇', '卷']) and not any(char in content for char in ['，', '。', '！', '？']):
         return False
     
-    # 检查是否为标题类内容（通常较短且可能包含特殊格式）
-    if len(content) < 50 and any([
-        content.startswith(('第', '章', '节', '卷', '篇')),
-        content.endswith(('章', '节', '卷', '篇')),
-        re.match(r'^[\d\s]+$', content),  # 纯数字
-        re.match(r'^[第\d章节卷篇\s]+$', content),  # 章节标题
-    ]):
-        return False
-    
-    # 检查是否为作者、版权等信息
+    # 检查是否包含版权相关信息
     if any(keyword in content for keyword in [
         '作者', '版权', '出版', '编辑', '译者', '责任编辑', 
         '©', 'Copyright', '版权所有', 'All rights reserved',
-        '定价', '元', 'ISBN', '书号'
+        '定价', 'ISBN', '书号'
     ]):
+        return False
+    
+    # 特殊检查：排除单独的价格信息（如"定价：XX元"）
+    if re.match(r'^定价[：:].+元$', content.strip()):
         return False
     
     # 检查是否为目录内容
@@ -188,14 +187,32 @@ def is_main_content(content: str) -> bool:
         return False
     
     # 检查是否为页眉页脚（通常包含页码）
-    if re.match(r'^[\d\-\s]+$', content) or len(content.split()) < 3:
+    if re.match(r'^[\d\-\s]+$', content):
         return False
     
-    return True
+    # 更宽松的长度检查：只排除极短且无意义的内容
+    if len(content) < 3:
+        return False
+    
+    # 如果包含中文字符且有一定长度，很可能是正文
+    chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', content))
+    if chinese_chars >= 2:
+        return True
+    
+    # 特殊情况：数字+中文单位的组合也应该被处理
+    if re.search(r'\d+\s*[\u4e00-\u9fff]+', content):
+        return True
+    
+    # 特殊情况：包含标点符号和中文的短文本
+    if chinese_chars >= 1 and re.search(r'[。！？，]', content):
+        return True
+    
+    return False
 
 def fix_punctuation_and_get_changes(content: str) -> tuple[str, list]:
     """
-    核心标点符号修复函数：对传入的纯文本进行标点符号补全。
+    基于中文语法规范修复标点符号问题并返回修改记录
+    参考《标点符号用法》国家标准GB/T 15834-2011
     只补全逗号，不补全句号，并跳过非正文内容。
     返回元组: (修改后的文本, 原子化变更列表)
     原子化变更: [{'original_text': '...','replacement_text': '...'}]
@@ -207,31 +224,55 @@ def fix_punctuation_and_get_changes(content: str) -> tuple[str, list]:
     modified_content = content
     atomic_changes = []
     
-    # 定义标点符号修复规则（只保留逗号补全）
+    # 简化的标点符号和空格修复规则（简单粗暴版本）
     punctuation_rules = [
-        # 规则1: 在中文字符后面跟空格再跟中文字符的地方添加逗号
+        # 最高优先级：去除标点符号前的空格
+        {
+            'pattern': r'\s+([，,；;：:.。！!？?])',
+            'replacement': r'\1',
+            'description': '去除标点符号前的空格'
+        },
+        
+        # 数字和单位处理（直接删除空格）
+        {
+            'pattern': r'([\d]+)\s+([元件个只张页卷本章节天年月日时分秒米厘米公里克千克斤两])',
+            'replacement': r'\1\2',
+            'description': '数字单位间去除空格'
+        },
+        
+        # 量词前的空格（直接删除）
+        {
+            'pattern': r'([一二三四五六七八九十百千万亿零壹贰叁肆伍陆柒捌玖拾佰仟萬億\d]+)\s+([个只条张片块把件套双对副组批次回遍趟])',
+            'replacement': r'\1\2',
+            'description': '删除量词前的空格'
+        },
+        
+        # 动作补语前的空格（直接删除）
+        {
+            'pattern': r'([\u4e00-\u9fff]*[走跑跳站坐躺])\s+(过来|过去|起来|下去|上来|下来|进来|出去)',
+            'replacement': r'\1\2',
+            'description': '删除动作补语前的空格'
+        },
+        
+        # 转折因果词前添加逗号（排除前面已有标点的情况）
+        {
+            'pattern': r'(?<![。！？，；：\-—])([\u4e00-\u9fff])\s+(但|然而|不过|可是|却|所以|因此|因而)',
+            'replacement': r'\1，\2',
+            'description': '转折因果词前添加逗号'
+        },
+        
+        # 其他连词前的空格（直接删除）
+        {
+            'pattern': r'\s+(和|与|及|以及|或者|或|但是|而且|并且|因为|如果|假如|虽然|尽管)',
+            'replacement': r'\1',
+            'description': '删除其他连词前的空格'
+        },
+        
+        # 简单粗暴：所有中文字符间的空格都替换为逗号
         {
             'pattern': r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])',
             'replacement': r'\1，\2',
-            'description': '中文字符间添加逗号'
-        },
-        # 规则2: 处理对话中的标点符号
-        {
-            'pattern': r'([\u4e00-\u9fff])\s+([""])',
-            'replacement': r'\1，\2',
-            'description': '对话前添加逗号'
-        },
-        # 规则3: 处理连续的中文字符，在适当位置添加逗号（优化版）
-        {
-            'pattern': r'([\u4e00-\u9fff]{6,})\s+([\u4e00-\u9fff]{6,})',
-            'replacement': r'\1，\2',
-            'description': '长句中添加逗号'
-        },
-        # 规则4: 处理数字和单位之间的空格
-        {
-            'pattern': r'([\d]+)\s+([元件个只张页卷本章节])',
-            'replacement': r'\1\2',
-            'description': '数字单位间去除空格'
+            'description': '中文字符间空格替换为逗号'
         }
     ]
     
@@ -249,15 +290,21 @@ def fix_punctuation_and_get_changes(content: str) -> tuple[str, list]:
                     original_text = match.group(0)
                     replacement_text = re.sub(pattern, replacement, original_text)
                     
-                    # 只有当替换后的文本不同时才记录变更
+                    # 只有当替换后的文本不同时才进行替换和记录
                     if original_text != replacement_text:
+                        # 简单检查：避免在已经有标点的地方重复添加逗号
+                        # 但允许删除标点符号前的空格
+                        if rule['description'] != '去除标点符号前的空格':
+                            if '，' in original_text or '。' in original_text or '！' in original_text or '？' in original_text:
+                                continue
+                        
                         atomic_changes.append({
                             "original_text": original_text,
                             "replacement_text": replacement_text
                         })
-                
-                # 应用替换
-                modified_content = re.sub(pattern, replacement, modified_content)
+                        
+                        # 应用替换
+                        modified_content = modified_content.replace(original_text, replacement_text, 1)
         except re.error as e:
             print(f"\n[!] 正则表达式错误: '{pattern}'. 错误: {e}. 跳过。")
             continue
