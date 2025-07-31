@@ -78,32 +78,132 @@ def process_book(driver, start_url, download_path):
 
         print(f"正在访问书籍主页: {base_url}")
         driver.get(base_url)
-        wait = WebDriverWait(driver, 30)
+        wait = WebDriverWait(driver, 45)  # 增加超时时间到45秒
         
         # 2. 获取小说标题
         print("正在等待页面加载并获取小说标题...")
-        novel_title_element = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'p[class*="e1fhqjtj1"]')))
-        novel_title = novel_title_element.text.strip().replace('/', '_').replace('\\', '_')
+        
+        # 尝试多个可能的标题选择器
+        title_selectors = [
+            'p[class*="e1fhqjtj1"]',    # 原始选择器
+            'h1[class*="title"]',       # 备用选择器1
+            'h1',                       # 通用h1选择器
+            'h2[class*="title"]',       # 备用选择器2
+            '[class*="title"]',         # 任何包含title的class
+            '.title'                    # 通用title类
+        ]
+        
+        novel_title = None
+        for selector in title_selectors:
+            try:
+                novel_title_element = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                novel_title = novel_title_element.text.strip().replace('/', '_').replace('\\', '_')
+                if novel_title:  # 确保标题不为空
+                    print(f"✅ 找到小说标题，使用选择器: {selector}")
+                    break
+            except (TimeoutException, Exception):
+                print(f"⚠️ 选择器 {selector} 未找到标题，尝试下一个...")
+                continue
+        
+        if not novel_title:
+            print("⚠️ 警告: 未能获取小说标题，使用默认名称")
+            novel_title = "未知小说"
+            
         print(f"📘 小说标题: {novel_title}")
 
         # 3. 滚动到底部以加载所有章节
         print("正在获取章节列表 (滚动加载)...")
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'div[class*="eihlkz80"]')))
         
+        # 使用多个可能的选择器来查找章节容器
+        chapter_container_selectors = [
+            'div[class*="eihlkz80"]',  # 原始选择器
+            'div[class*="ese98wi3"]',  # 备用选择器1
+            'div[class*="episode"]',   # 备用选择器2
+            'div[data-testid*="episode"]',  # 备用选择器3
+            'div[class*="chapter"]',   # 备用选择器4
+            'div[class*="list"]'       # 备用选择器5
+        ]
+        
+        chapter_container_found = False
+        for selector in chapter_container_selectors:
+            try:
+                wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                print(f"✅ 找到章节容器，使用选择器: {selector}")
+                chapter_container_found = True
+                break
+            except TimeoutException:
+                print(f"⚠️ 选择器 {selector} 未找到元素，尝试下一个...")
+                continue
+        
+        if not chapter_container_found:
+            print("❌ 警告: 未能找到章节容器，但继续尝试滚动加载...")
+        
+        # 滚动加载策略，增加尝试次数限制
         last_height = driver.execute_script("return document.body.scrollHeight")
-        while True:
+        scroll_attempts = 0
+        max_scroll_attempts = 10
+        
+        while scroll_attempts < max_scroll_attempts:
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
+            time.sleep(3)  # 增加等待时间
             new_height = driver.execute_script("return document.body.scrollHeight")
             if new_height == last_height:
                 print("✅ 已滚动到底部，加载完成。")
                 break
             last_height = new_height
+            scroll_attempts += 1
+            print(f"  滚动中... ({scroll_attempts}/{max_scroll_attempts})")
+        
+        if scroll_attempts >= max_scroll_attempts:
+            print("⚠️ 达到最大滚动尝试次数，停止滚动。")
         
         # 4. 获取所有章节链接
-        chapter_list_container = driver.find_element(By.CSS_SELECTOR, 'div[class*="ese98wi3"]')
-        chapter_links_elements = chapter_list_container.find_elements(By.CSS_SELECTOR, 'a[href*="/episodes/"]')
-        full_url_list = sorted(list(set([elem.get_attribute('href') for elem in chapter_links_elements])))
+        # 尝试多个可能的章节列表容器选择器
+        chapter_list_selectors = [
+            'div[class*="ese98wi3"]',  # 原始选择器
+            'div[class*="eihlkz80"]',  # 备用选择器1
+            'div[class*="episode"]',   # 备用选择器2
+            'div[class*="chapter"]',   # 备用选择器3
+            'div[class*="list"]',      # 备用选择器4
+            'main',                    # 通用容器选择器
+            'body'                     # 最后的兜底选择器
+        ]
+        
+        chapter_list_container = None
+        for selector in chapter_list_selectors:
+            try:
+                chapter_list_container = driver.find_element(By.CSS_SELECTOR, selector)
+                print(f"✅ 找到章节列表容器，使用选择器: {selector}")
+                break
+            except Exception:
+                print(f"⚠️ 选择器 {selector} 未找到章节列表容器，尝试下一个...")
+                continue
+        
+        if chapter_list_container is None:
+            print("❌ 错误: 未能找到任何章节列表容器。")
+            return None, None, stats
+        
+        # 尝试多个可能的章节链接选择器
+        chapter_link_selectors = [
+            'a[href*="/episodes/"]',     # 原始选择器
+            'a[href*="episode"]',        # 备用选择器1
+            'a[href*="chapter"]',        # 备用选择器2
+            'a[class*="episode"]',       # 备用选择器3
+            'a[class*="chapter"]'        # 备用选择器4
+        ]
+        
+        full_url_list = []
+        for selector in chapter_link_selectors:
+            try:
+                chapter_links_elements = chapter_list_container.find_elements(By.CSS_SELECTOR, selector)
+                if chapter_links_elements:
+                    urls = [elem.get_attribute('href') for elem in chapter_links_elements if elem.get_attribute('href')]
+                    full_url_list = sorted(list(set(urls)))
+                    print(f"✅ 找到章节链接，使用选择器: {selector}")
+                    break
+            except Exception:
+                print(f"⚠️ 选择器 {selector} 未找到章节链接，尝试下一个...")
+                continue
 
         if not full_url_list:
             print("❌ 错误: 未能找到任何章节链接。")
@@ -161,15 +261,53 @@ def process_book(driver, start_url, download_path):
                         
                     driver.get(url)
 
-                    chapter_title_element = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'span[class*="e14fx9ai3"]')))
-                    chapter_title = chapter_title_element.text.strip()
+                    # 尝试多个可能的章节标题选择器
+                    chapter_title_selectors = [
+                        'span[class*="e14fx9ai3"]',  # 原始选择器
+                        'h1[class*="title"]',        # 备用选择器1
+                        'h1',                        # 通用h1选择器
+                        'h2',                        # 备用h2选择器
+                        '[class*="title"]'           # 任何包含title的class
+                    ]
                     
-                    content_container = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.tiptap.ProseMirror')))
-                    content_elements = content_container.find_elements(By.CSS_SELECTOR, 'p')
-                    content = "\n\n".join([p.text for p in content_elements if p.text.strip()])
+                    chapter_title = None
+                    for selector in chapter_title_selectors:
+                        try:
+                            chapter_title_element = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                            chapter_title = chapter_title_element.text.strip()
+                            if chapter_title:  # 确保标题不为空
+                                break
+                        except (TimeoutException, Exception):
+                            continue
                     
-                    if not content:
-                        raise ValueError("获取到的内容为空。")
+                    if not chapter_title:
+                        chapter_title = f"第{chapter_number}章"
+                        print(f"  ⚠️ 无法获取章节标题，使用默认: {chapter_title}")
+                    
+                    # 尝试多个可能的内容选择器
+                    content_selectors = [
+                        '.tiptap.ProseMirror',       # 原始选择器
+                        '.content',                  # 通用内容选择器
+                        '[class*="content"]',        # 任何包含content的class
+                        '.ProseMirror',              # ProseMirror编辑器
+                        '[class*="text"]',           # 任何包含text的class
+                        'article'                    # article标签
+                    ]
+                    
+                    content = None
+                    for selector in content_selectors:
+                        try:
+                            content_container = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                            content_elements = content_container.find_elements(By.CSS_SELECTOR, 'p')
+                            if content_elements:
+                                content = "\n\n".join([p.text for p in content_elements if p.text.strip()])
+                                if content.strip():  # 确保内容不为空
+                                    break
+                        except (TimeoutException, Exception):
+                            continue
+                    
+                    if not content or not content.strip():
+                        raise ValueError("获取到的内容为空，可能页面结构已变化。")
 
                     sanitized_title = chapter_title.replace('/', '_').replace('\\', '_').replace(':', '：')
                     file_name = f"{chapter_prefix}{sanitized_title}.txt"
@@ -185,13 +323,25 @@ def process_book(driver, start_url, download_path):
 
                 except Exception as e:
                     retries += 1
-                    print(f"  - 抓取本章时出错 (尝试 {retries}/{MAX_RETRIES}): {e}")
+                    error_msg = str(e)
+                    print(f"  - 抓取本章时出错 (尝试 {retries}/{MAX_RETRIES}): {error_msg}")
+                    
+                    # 如果是TimeoutException，提供更详细的调试信息
+                    if "TimeoutException" in error_msg or "timeout" in error_msg.lower():
+                        print(f"  - 超时错误，可能是页面加载过慢或元素选择器已变化")
+                        print(f"  - 当前页面URL: {driver.current_url}")
+                        try:
+                            page_source_preview = driver.page_source[:500]
+                            print(f"  - 页面源码预览: {page_source_preview}...")
+                        except:
+                            print("  - 无法获取页面源码预览")
+                    
                     if retries < MAX_RETRIES:
-                        time.sleep(3)
+                        time.sleep(5)  # 增加重试间隔
                     else:
                         print(f"  ❌ 抓取本章失败，已达到最大重试次数。")
                         stats['failed'] += 1
-                        stats['failed_items'].append({'url': url, 'error': str(e)})
+                        stats['failed_items'].append({'url': url, 'error': error_msg})
 
             time.sleep(2)
             

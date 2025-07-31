@@ -38,6 +38,8 @@ def menu_ebook_workshop():
         print(" 11. 合并文件夹内所有 EPUB")
         print(" 12. [工具] EPUB 解包/封装工具")
         print("     └ 功能: 批量解压 EPUB 便于编辑，或从文件夹重新打包成 EPUB。")
+        print(" 13. 标点符号补全工具 (TXT/EPUB)")
+        print("     └ 功能: 智能补全中文文本中缺失的逗号，跳过非正文内容。")
 
         print("----------")
         print(" 88. 查看本模块用法说明 (README)")
@@ -68,6 +70,8 @@ def menu_ebook_workshop():
             utils.run_script("epub_merge.py", cwd=module_path)
         elif choice == '12':
             utils.run_script("epub_toolkit.py", cwd=module_path)
+        elif choice == '13':
+            utils.run_script("punctuation_fixer.py", cwd=module_path)
         elif choice == '88':
             utils.show_usage(module_path)
         elif choice == '0':
