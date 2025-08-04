@@ -408,7 +408,7 @@ def get_toc_rules():
     use_default = input("是否使用默认规则提取目录? ('#' 代表一级, '##' 代表二级) (按回车确认, 输入n修改): ").lower()
     
     if use_default != 'n':
-        return r'^#\s*(.*)', r'^##\s*(.*)'
+        return r'^[\s　]*#\s*(.*)', r'^[\s　]*##\s*(.*)'
     else:
         level1_regex = input("请输入一级目录的正则表达式 (例如: ^第.*?章): ").strip()
         level2_regex = input(r"请输入二级目录的正则表达式 (例如: ^\d+\.\d+): ").strip()
