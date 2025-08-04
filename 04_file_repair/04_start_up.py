@@ -20,7 +20,7 @@ def menu_file_repair_and_utilities():
         print(" 1. 自动修复竖排版并转为简体中文")
         print(" 2. 修复 Kindle 等设备不显示封面的问题")
         print("\n--- TXT 修复 ---")
-        print(" 3. 修复 PDF 转 TXT 造成的错误断行")
+        print(" 3. TXT 文件格式化 (添加段落间距)")
         print(" 4. 修复 TXT 文件的编码问题 (解决乱码)")
         print("\n--- 辅助工具 ---")
         print(" 5. 在浏览器中批量打开 Bomtoon 链接")
@@ -34,7 +34,7 @@ def menu_file_repair_and_utilities():
         elif choice == '2':
             utils.run_script("cover_repair.py", cwd=module_path_repair)
         elif choice == '3':
-            utils.run_script("txt_reformat_chapter_safe.py", cwd=module_path_repair)
+            utils.run_script("txt_reformat.py", cwd=module_path_repair)
         elif choice == '4':
             utils.run_script("fix_txt_encoding.py", cwd=module_path_repair)
         elif choice == '5':
