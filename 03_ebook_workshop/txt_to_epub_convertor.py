@@ -524,11 +524,49 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
     book.add_author("未知作者")
     output_path = os.path.join(output_dir, f"{book_name}.epub")
 
+    cover_item = None
     if cover_path:
         try:
+            # 添加封面图片
             book.set_cover("cover.jpg", open(cover_path, 'rb').read())
+            
+            # 创建封面HTML页面
+            cover_item = epub.EpubHtml(
+                title='封面',
+                file_name='cover.xhtml',
+                lang='zh'
+            )
+            cover_item.content = f'''<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>封面</title>
+<link rel="stylesheet" type="text/css" href="{css_filename}"/>
+<style>
+body {{
+    margin: 0;
+    padding: 0;
+    text-align: center;
+    background-color: #fff;
+}}
+.cover-image {{
+    max-width: 100%;
+    max-height: 100vh;
+    width: auto;
+    height: auto;
+}}
+</style>
+</head>
+<body>
+<div>
+<img src="cover.jpg" alt="{book_name}" class="cover-image"/>
+</div>
+</body>
+</html>'''
+            book.add_item(cover_item)
             print(f"[LOG] 成功添加封面: '{os.path.basename(cover_path)}'")
-        except Exception as e: print(f"[警告] 添加封面失败: {e}")
+        except Exception as e: 
+            print(f"[警告] 添加封面失败: {e}")
+            cover_item = None
 
     with open(txt_path, 'r', encoding='utf-8') as f:
         full_text = f.read()
@@ -626,11 +664,20 @@ def create_epub(txt_path, final_toc, css_content, cover_path, l1_regex, l2_regex
         book.add_item(chap)
     
     # 设置spine（阅读顺序）
-    book.spine = chapters
-    if cover_path:
-        book.spine.insert(0, 'cover')
+    if cover_item:
+        book.spine = [cover_item] + chapters
+    else:
+        book.spine = chapters
 
     try:
+        # 检查并确保EPUB有必需的identifier元数据
+        if not book.get_metadata('DC', 'identifier'):
+            # 如果没有identifier，添加一个默认的
+            import uuid
+            default_identifier = f"urn:uuid:{uuid.uuid4()}"
+            book.add_metadata('DC', 'identifier', default_identifier)
+            print(f"  [DEBUG] 添加默认identifier: {default_identifier}")
+        
         epub.write_epub(output_path, book, {})
         print(f"\n[成功] EPUB 文件已保存到: {output_path}")
 
