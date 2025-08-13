@@ -61,7 +61,7 @@ def menu_ebook_workshop():
         elif choice == '7':
             utils.run_script("epub_cleaner.py", cwd=module_path)
         elif choice == '8':
-            utils.run_script("batch_replacer.py", cwd=module_path)
+            utils.run_script("batch_replacer_v2.py", cwd=module_path)
         elif choice == '9':
             utils.run_script("epub_styler.py", cwd=module_path)
         elif choice == '10':
@@ -71,7 +71,7 @@ def menu_ebook_workshop():
         elif choice == '12':
             utils.run_script("epub_toolkit.py", cwd=module_path)
         elif choice == '13':
-            utils.run_script("punctuation_fixer.py", cwd=module_path)
+            utils.run_script("punctuation_fixer_v2.py", cwd=module_path)
         elif choice == '88':
             utils.show_usage(module_path)
         elif choice == '0':
