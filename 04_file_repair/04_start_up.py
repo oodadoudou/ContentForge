@@ -19,11 +19,12 @@ def menu_file_repair_and_utilities():
         print("--- EPUB 修复 ---")
         print(" 1. 自动修复竖排版并转为简体中文")
         print(" 2. 修复 Kindle 等设备不显示封面的问题")
+        print(" 3. 修复 EPUB 缺失的 CSS 样式链接")
         print("\n--- TXT 修复 ---")
-        print(" 3. TXT 文件格式化 (添加段落间距)")
-        print(" 4. 修复 TXT 文件的编码问题 (解决乱码)")
+        print(" 4. TXT 文件格式化 (添加段落间距)")
+        print(" 5. 修复 TXT 文件的编码问题 (解决乱码)")
         print("\n--- 辅助工具 ---")
-        print(" 5. 在浏览器中批量打开 Bomtoon 链接")
+        print(" 6. 在浏览器中批量打开 Bomtoon 链接")
         print("----------")
         print(" 8. 查看本模块用法说明 (README)")
         print(" 0. 返回主菜单")
@@ -34,10 +35,12 @@ def menu_file_repair_and_utilities():
         elif choice == '2':
             utils.run_script("cover_repair.py", cwd=module_path_repair)
         elif choice == '3':
-            utils.run_script("txt_reformat.py", cwd=module_path_repair)
+            utils.run_script("css_fixer.py", cwd=module_path_repair)
         elif choice == '4':
-            utils.run_script("fix_txt_encoding.py", cwd=module_path_repair)
+            utils.run_script("txt_reformat.py", cwd=module_path_repair)
         elif choice == '5':
+            utils.run_script("fix_txt_encoding.py", cwd=module_path_repair)
+        elif choice == '6':
             utils.run_script("open_bomtoon.py", cwd=module_path_utils)
         elif choice == '8':
             utils.show_usage(module_path_repair)
