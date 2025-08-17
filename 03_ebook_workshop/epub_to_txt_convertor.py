@@ -34,13 +34,14 @@ def convert_epub_to_txt(epub_path, output_txt_path):
             # 使用 BeautifulSoup 解析 HTML
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # 查找所有的 <p> 标签 (段落)
-            paragraphs = soup.find_all('p')
+            # 查找所有的文本内容标签 (段落和标题)
+            # 包括段落标签 <p> 和标题标签 <h1> 到 <h6>
+            content_tags = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
             
-            for p in paragraphs:
-                # 获取 <p> 标签内的所有文本
-                text = p.get_text(' ', strip=True)
-                if text: # 确保不添加空段落
+            for tag in content_tags:
+                # 获取标签内的所有文本
+                text = tag.get_text(' ', strip=True)
+                if text: # 确保不添加空内容
                     all_paragraphs.append(text)
         
         # 将所有段落用两个换行符（即一个空行）连接起来
