@@ -1,8 +1,11 @@
 import re
 import os
 import warnings
+import tempfile
+import zipfile
+import shutil
 from pathlib import Path
-from ebooklib import epub, ITEM_DOCUMENT
+from ebooklib import epub, ITEM_DOCUMENT, ITEM_STYLE
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 from tqdm import tqdm
 import html
@@ -359,15 +362,107 @@ def process_txt_file(file_path: Path, processed_dir: Path, report_dir: Path):
     return False
 
 def process_epub_file(file_path: Path, processed_dir: Path, report_dir: Path):
-    """处理单个 .epub 文件。"""
+    """处理单个 .epub 文件。采用直接解包EPUB文件的方式来查找CSS链接。"""
     try:
         book = epub.read_epub(str(file_path))
         changes_log = []
         book_is_modified = False
         global_position = 0  # 记录全局位置
+        
+        # 第一步：直接解包EPUB文件到临时目录
+        temp_dir = None
+        original_html_contents = {}
+        original_css_links_by_file = {}
+        
+        try:
+            temp_dir = tempfile.mkdtemp(prefix='epub_extract_')
+            print(f"[DEBUG] 解包EPUB文件到临时目录: {temp_dir}")
+            
+            # 解包EPUB文件
+            with zipfile.ZipFile(str(file_path), 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+            
+            # 遍历解包后的目录，查找所有HTML/XHTML文件
+            html_files = []
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    if file.endswith(('.html', '.xhtml')):
+                        html_files.append(os.path.join(root, file))
+            
+            print(f"[DEBUG] 在解包目录中发现 {len(html_files)} 个HTML/XHTML文件")
+            
+            # 逐个读取HTML文件的原始内容并查找CSS链接
+            css_pattern = r'<link[^>]*href=["\'][^"\']*.css["\'][^>]*\/?>'  
+            
+            for html_file_path in html_files:
+                try:
+                    with open(html_file_path, 'r', encoding='utf-8') as f:
+                        file_content = f.read()
+                    
+                    # 获取相对于EPUB根目录的文件名
+                    relative_path = os.path.relpath(html_file_path, temp_dir)
+                    # 转换路径分隔符为统一格式（使用正斜杠）
+                    relative_path = relative_path.replace('\\', '/')
+                    
+                    # 保存原始内容
+                    original_html_contents[relative_path] = file_content
+                    
+                    # 查找CSS链接
+                    css_links = re.findall(css_pattern, file_content, re.IGNORECASE)
+                    original_css_links_by_file[relative_path] = css_links
+                    
+                    print(f"[DEBUG] 文件 {relative_path}: 发现 {len(css_links)} 个CSS链接")
+                    if css_links:
+                        for i, link in enumerate(css_links):
+                            print(f"[DEBUG]   CSS链接 {i+1}: {link}")
+                    
+                except Exception as e:
+                    print(f"[DEBUG] 读取文件 {html_file_path} 失败: {e}")
+                    continue
+            
+            print(f"[DEBUG] 总共从 {len(original_html_contents)} 个HTML文件中提取了原始内容")
+            
+        finally:
+            # 清理临时目录
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                    print(f"[DEBUG] 已清理临时目录: {temp_dir}")
+                except Exception as e:
+                    print(f"[DEBUG] 清理临时目录失败: {e}")
 
+        # 第二步：使用ebooklib处理EPUB文件内容
         for item in book.get_items_of_type(ITEM_DOCUMENT):
-            soup = BeautifulSoup(item.get_content(), 'xml')
+            item_name = item.get_name()
+            original_content_bytes = item.get_content()
+            original_content = original_content_bytes.decode('utf-8')
+            
+            print(f"[DEBUG] 处理文件: {item_name}")
+            print(f"[DEBUG] 原始 HTML 内容前500字符: {original_content[:500]}")
+            
+            # 从解包的文件中获取CSS链接信息
+            # 尝试多种路径匹配方式
+            css_links_for_this_file = []
+            possible_paths = [
+                item_name,
+                item_name.lstrip('/'),
+                f"EPUB/{item_name}",
+                f"OEBPS/{item_name}"
+            ]
+            
+            for path in possible_paths:
+                if path in original_css_links_by_file:
+                    css_links_for_this_file = original_css_links_by_file[path]
+                    print(f"[DEBUG] 通过路径 '{path}' 找到CSS链接信息")
+                    break
+            
+            print(f"[DEBUG] 从解包文件中发现的CSS链接数量: {len(css_links_for_this_file)}")
+            if css_links_for_this_file:
+                for i, link in enumerate(css_links_for_this_file):
+                    print(f"[DEBUG] 解包文件CSS链接 {i+1}: {link}")
+            
+            # 使用BeautifulSoup解析
+            soup = BeautifulSoup(original_content_bytes, 'xml')
             if not soup.body:
                 continue
 
@@ -405,10 +500,88 @@ def process_epub_file(file_path: Path, processed_dir: Path, report_dir: Path):
                 
                 global_position += len(p_text_original)  # 更新全局位置
 
+            # 获取处理后的内容（无论是否修改都需要检查CSS链接）
+            processed_content = str(soup)
+            
+            # 调试输出：显示处理后内容的前500字符
+            print(f"[DEBUG] 处理后 HTML 内容前500字符: {processed_content[:500]}")
+            
+            # 比对解包文件中的CSS链接和处理后的内容，检查CSS链接是否丢失
+            css_was_restored = False
+            if css_links_for_this_file:
+                print(f"[DEBUG] 开始比对CSS链接...")
+                missing_links = []
+                for i, css_link in enumerate(css_links_for_this_file):
+                    if css_link not in processed_content:
+                        missing_links.append(css_link)
+                        print(f"[DEBUG] ✗ CSS 链接 {i+1} 丢失: {css_link}")
+                    else:
+                        print(f"[DEBUG] ✓ CSS 链接 {i+1} 存在: {css_link}")
+                
+                if missing_links:
+                    print(f"[DEBUG] 发现 {len(missing_links)} 个丢失的CSS链接，从解包文件中恢复...")
+                    
+                    # 从解包文件的原始内容中提取head标签的完整内容
+                    original_file_content = None
+                    for path in possible_paths:
+                        if path in original_html_contents:
+                            original_file_content = original_html_contents[path]
+                            print(f"[DEBUG] 通过路径 '{path}' 找到原始文件内容")
+                            break
+                    
+                    if original_file_content:
+                        original_head_match = re.search(r'<head[^>]*>.*?</head>', original_file_content, re.DOTALL | re.IGNORECASE)
+                        if original_head_match:
+                            original_head_content = original_head_match.group(0)
+                            print(f"[DEBUG] 解包文件head标签内容: {original_head_content}")
+                            
+                            # 查找处理后内容中的head标签
+                            processed_head_match = re.search(r'<head[^>]*>.*?</head>', processed_content, re.DOTALL | re.IGNORECASE)
+                            if processed_head_match:
+                                # 替换整个head标签
+                                processed_content = processed_content.replace(processed_head_match.group(0), original_head_content)
+                                print(f"[DEBUG] ✓ 已用解包文件head标签替换处理后的head标签")
+                                css_was_restored = True
+                            else:
+                                # 查找自闭合的head标签
+                                head_self_closing_match = re.search(r'<head\s*\/>', processed_content, re.IGNORECASE)
+                                if head_self_closing_match:
+                                    processed_content = processed_content.replace(head_self_closing_match.group(0), original_head_content)
+                                    print(f"[DEBUG] ✓ 已用解包文件head标签替换自闭合head标签")
+                                    css_was_restored = True
+                                else:
+                                    print(f"[DEBUG] ✗ 未找到head标签，无法恢复CSS链接")
+                        else:
+                            print(f"[DEBUG] ✗ 解包文件中未找到完整的head标签")
+                    else:
+                        print(f"[DEBUG] ✗ 未找到对应的解包文件内容")
+                else:
+                    print(f"[DEBUG] ✓ 所有CSS链接都存在，无需恢复")
+            else:
+                print(f"[DEBUG] 解包文件中无CSS链接，无需检查")
+            
+            # 调试输出：显示最终内容的前500字符
+            print(f"[DEBUG] 最终 HTML 内容前500字符: {processed_content[:500]}")
+            
+            # 如果文件被修改，则更新item内容
             if item_is_modified:
-                item.set_content(str(soup).encode('utf-8'))
+                # 如果CSS被恢复，使用恢复后的内容，否则使用BeautifulSoup处理后的内容
+                final_content = processed_content if css_was_restored else str(soup)
+                item.set_content(final_content.encode('utf-8'))
+            elif css_was_restored:
+                # 如果只是CSS被恢复而内容没有修改，直接使用恢复后的内容
+                item.set_content(processed_content.encode('utf-8'))
+                book_is_modified = True  # 确保即使只恢复CSS也标记为已修改
 
         if book_is_modified:
+            # 检查并确保EPUB有必需的identifier元数据
+            if not book.get_metadata('DC', 'identifier'):
+                # 如果没有identifier，添加一个默认的
+                import uuid
+                default_identifier = f"urn:uuid:{uuid.uuid4()}"
+                book.add_metadata('DC', 'identifier', default_identifier)
+                print(f"  [DEBUG] 添加默认identifier: {default_identifier}")
+            
             epub.write_epub(str(processed_dir / file_path.name), book, {})
             unique_changes = [dict(t) for t in {tuple(d.items()) for d in changes_log}]
             generate_report(report_dir / f"{file_path.name}.html", unique_changes, file_path.name)
