@@ -8,15 +8,15 @@
 import re
 import os
 import warnings
+import tempfile
 import zipfile
 import shutil
-import xml.etree.ElementTree as ET
-import uuid
 from pathlib import Path
 from ebooklib import epub, ITEM_DOCUMENT, ITEM_STYLE
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 from tqdm import tqdm
 import html
+import sys
 import json
 
 # --- 屏蔽已知警告 ---
@@ -29,6 +29,112 @@ PROCESSED_DIR_NAME = "processed_files"
 REPORT_DIR_NAME = "compare_reference"
 HIGHLIGHT_STYLE = "background-color: #f1c40f; color: #000; padding: 2px; border-radius: 3px;"
 
+# =========================
+# 引號修正函數
+# =========================
+def fix_quotes_with_log(text):
+    """修正引號，並返回修改記錄"""
+    atomic_changes = []
+
+    def record_change(orig, repl):
+        if orig != repl:
+            atomic_changes.append({"original_text": orig, "replacement_text": repl})
+        return repl
+
+    def replace_in_text(segment):
+        # --- 0. 處理閉-開引號順序錯誤：”…“ → 「…」
+        segment = re.sub(
+            r'”([^“]*?)“',
+            lambda m: record_change(m.group(0), f'「{m.group(1)}」'),
+            segment
+        )
+
+        # --- 1. 整段被 " 或 “ ” 包住的文字 → 「」
+        segment = re.sub(
+            r'^[\s]*["“](.*)["”][\s]*$',
+            lambda m: record_change(m.group(0), f'「{m.group(1)}」'),
+            segment
+        )
+
+        # --- 2. 錯誤配對修正
+        segment = re.sub(r'」(.*?)「', lambda m: record_change(m.group(0), f'「{m.group(1)}」'), segment)
+        segment = re.sub(r'』(.*?)『', lambda m: record_change(m.group(0), f'『{m.group(1)}』'), segment)
+
+        # --- 2.5. 修正頭尾不對稱的引號
+        # case: 句首是閉引號 → 換成開引號
+        segment = re.sub(
+            r'^」([^」]+)」$',
+            lambda m: record_change(m.group(0), f'「{m.group(1)}」'),
+            segment
+        )
+        # case: 句尾是開引號 → 換成閉引號
+        segment = re.sub(
+            r'^「([^「]+)「$',
+            lambda m: record_change(m.group(0), f'「{m.group(1)}」'),
+            segment
+        )
+
+        # --- 3. "句子" → 「句子」
+        segment = re.sub(r'"([^"]*?)"', lambda m: record_change(m.group(0), f'「{m.group(1)}」'), segment)
+        segment = re.sub(r'“([^”]*?)”', lambda m: record_change(m.group(0), f'「{m.group(1)}」'), segment)
+
+        # --- 4. 替換混用
+        segment = segment.replace("“", "「").replace("”", "」")
+
+        # --- 5. 修正混用標點
+        segment = re.sub(r'([。！？])["”]', lambda m: record_change(m.group(0), f'{m.group(1)}」'), segment)
+        segment = re.sub(r'(["”])([。！？])', lambda m: record_change(m.group(0), f'」{m.group(2)}'), segment)
+
+        # --- 5.5. 在閉引號前補句號
+        # 中文或英文文字 + 」 → 補句號
+        segment = re.sub(
+            r'([\u4e00-\u9fffA-Za-z0-9])」',
+            lambda m: record_change(m.group(0), f'{m.group(1)}。」'),
+            segment
+        )
+
+        # 單個點 + 」 → 變成句號
+        segment = re.sub(
+            r'(?<!\.)\.」',
+            lambda m: record_change(m.group(0), '。」'),
+            segment
+        )
+
+        # --- 6. 單獨句尾的 " → 」(已有「或」結尾則跳過)
+        segment = re.sub(
+            r'([^\s])"$',
+            lambda m: record_change(m.group(0), f'{m.group(1)}」') if not m.group(1).endswith('」') else m.group(0),
+            segment
+        )
+
+        # --- 7. 清理尾端多餘閉引號
+        segment = re.sub(r'」+$', '」', segment)
+        segment = re.sub(r'^「+', '「', segment)
+
+        # --- 8. 避免空「」
+        segment = re.sub(r'「」', '', segment)
+
+        return segment
+
+    # --- 新增：專門處理 <p class="a"> 內的引號
+    def replace_inside_p_tag(match):
+        content = match.group(1)
+        fixed_content = replace_in_text(content)
+        return f'<p class="a">{fixed_content}</p>'
+
+    # 先處理 <p class="a"> 標籤內的文字
+    text = re.sub(r'<p class="a">(.*?)</p>', replace_inside_p_tag, text, flags=re.DOTALL)
+
+    # 再處理其他非標籤文字
+    parts = re.split(r'(<[^>]+>)', text)
+    fixed_parts = [p if p.startswith("<") and p.endswith(">") else replace_in_text(p) for p in parts]
+
+    return "".join(fixed_parts), atomic_changes
+
+
+# =========================
+# 標點符號修正函數
+# =========================
 def fix_punctuation_and_get_changes(content: str) -> tuple[str, list]:
     """
     基于中文语法规范修复标点符号问题并返回修改记录
@@ -133,6 +239,9 @@ def fix_punctuation_and_get_changes(content: str) -> tuple[str, list]:
     unique_atomic_changes = [dict(t) for t in {tuple(d.items()) for d in atomic_changes}]
     return modified_content, unique_atomic_changes
 
+# =========================
+# 正文判斷
+# =========================
 def is_main_content(content: str) -> bool:
     """
     判断给定内容是否为正文内容
@@ -187,6 +296,9 @@ def is_main_content(content: str) -> bool:
     
     return False
 
+# =========================
+# 報告生成
+# =========================
 def generate_report(report_path: Path, changes_log: list, source_filename: str):
     """
     生成HTML格式的变更报告。
@@ -323,6 +435,9 @@ def generate_report(report_path: Path, changes_log: list, source_filename: str):
     except Exception as e:
         print(f"[!] 无法写入报告文件 {report_path}: {e}")
 
+# =========================
+# TXT 處理
+# =========================
 def process_txt_file(file_path: Path, processed_dir: Path, report_dir: Path):
     """处理单个 .txt 文件。"""
     try:
@@ -334,24 +449,35 @@ def process_txt_file(file_path: Path, processed_dir: Path, report_dir: Path):
         current_position = 0  # 记录当前在原文中的位置
 
         for paragraph_index, p_original in enumerate(paragraphs):
-            p_modified, atomic_changes = fix_punctuation_and_get_changes(p_original)
-            processed_paragraphs.append(p_modified)
+            # 先修正引號
+            p_original_fixed, quote_changes = fix_quotes_with_log(p_original)
+            
+            # 再補全標點
+            p_text_modified, atomic_changes = fix_punctuation_and_get_changes(p_original_fixed)
+            
+            # 合併修改記錄
+            atomic_changes = quote_changes + atomic_changes
+
+            processed_paragraphs.append(p_text_modified)
 
             if atomic_changes:
                 file_was_modified = True
-                original_report = html.escape(p_original)
-                modified_report = html.escape(p_modified)
+                original_report = html.escape(p_original, quote=False)
+                modified_report = html.escape(p_text_modified, quote=False)
 
+                # 對每個修改都加 highlight
                 for change in atomic_changes:
-                    orig_esc = html.escape(change["original_text"])
-                    repl_esc = html.escape(change["replacement_text"])
-                    original_report = original_report.replace(orig_esc, f'<span class="highlight">{orig_esc}</span>')
-                    modified_report = modified_report.replace(repl_esc, f'<span class="highlight">{repl_esc}</span>')
-                
+                    orig_esc = html.escape(change["original_text"], quote=False)
+                    repl_esc = html.escape(change["replacement_text"], quote=False)
+                    if orig_esc:
+                        original_report = original_report.replace(orig_esc, f'<span class="highlight">{orig_esc}</span>')
+                    if repl_esc:
+                        modified_report = modified_report.replace(repl_esc, f'<span class="highlight">{repl_esc}</span>')
+
                 changes_log_for_report.append({
                     'original': original_report.replace('\n', '<br>'),
                     'modified': modified_report.replace('\n', '<br>'),
-                    'position': current_position + paragraph_index  # 添加位置信息
+                    'position': current_position + paragraph_index
                 })
             
             current_position += len(p_original) + 2  # +2 for \n\n separator
@@ -361,6 +487,7 @@ def process_txt_file(file_path: Path, processed_dir: Path, report_dir: Path):
             processed_file_path = processed_dir / file_path.name
             processed_file_path.write_text(new_content, encoding='utf-8')
             report_path = report_dir / f"{file_path.name}.html"
+            # 保留所有修改，不再去重
             generate_report(report_path, changes_log_for_report, file_path.name)
             return True
 
@@ -368,316 +495,119 @@ def process_txt_file(file_path: Path, processed_dir: Path, report_dir: Path):
         print(f"\n[!] 处理TXT文件失败 {file_path.name}: {e}")
     return False
 
-def preprocess_epub_cover(epub_path):
-    """
-    预处理EPUB文件，解决封面兼容性问题
-    分析EPUB结构，如果发现非标准封面路径，创建临时的标准封面文件
-    返回: (是否需要清理临时文件, 临时文件路径列表)
-    """
-    print(f"[DEBUG] 开始预处理EPUB封面: {epub_path.name}")
-    
-    temp_files_to_cleanup = []
-    needs_cleanup = False
-    
-    try:
-        # 使用zipfile分析EPUB结构
-        with zipfile.ZipFile(epub_path, 'r') as zip_ref:
-            file_list = zip_ref.namelist()
-            print(f"[DEBUG] EPUB文件列表: {len(file_list)} 个文件")
-            
-            # 查找META-INF/container.xml
-            container_xml_path = None
-            for file_name in file_list:
-                if file_name.endswith('META-INF/container.xml') or file_name == 'META-INF/container.xml':
-                    container_xml_path = file_name
-                    break
-            
-            if not container_xml_path:
-                print(f"[DEBUG] 未找到container.xml，使用默认处理")
-                return needs_cleanup, temp_files_to_cleanup
-            
-            # 读取container.xml找到content.opf路径
-            container_content = zip_ref.read(container_xml_path).decode('utf-8')
-            print(f"[DEBUG] 读取container.xml成功")
-            
-            try:
-                container_root = ET.fromstring(container_content)
-                # 查找rootfile元素
-                rootfile_elem = container_root.find('.//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile')
-                if rootfile_elem is None:
-                    # 尝试不带命名空间的查找
-                    rootfile_elem = container_root.find('.//rootfile')
-                
-                if rootfile_elem is not None:
-                    opf_path = rootfile_elem.get('full-path')
-                    print(f"[DEBUG] 找到OPF文件路径: {opf_path}")
-                    
-                    # 读取content.opf文件
-                    if opf_path in file_list:
-                        opf_content = zip_ref.read(opf_path).decode('utf-8')
-                        print(f"[DEBUG] 读取OPF文件成功")
-                        
-                        # 分析OPF文件查找封面信息
-                        try:
-                            opf_root = ET.fromstring(opf_content)
-                            
-                            # 查找封面相关的item
-                            cover_items = []
-                            
-                            # 方法1: 查找properties="cover-image"的item
-                            for item in opf_root.findall('.//{http://www.idpf.org/2007/opf}item'):
-                                properties = item.get('properties', '')
-                                if 'cover-image' in properties:
-                                    cover_items.append(item.get('href'))
-                            
-                            # 方法2: 查找id="cover"或包含"cover"的item
-                            if not cover_items:
-                                for item in opf_root.findall('.//{http://www.idpf.org/2007/opf}item'):
-                                    item_id = item.get('id', '').lower()
-                                    href = item.get('href', '')
-                                    if 'cover' in item_id or 'cover' in href.lower():
-                                        if href.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                                            cover_items.append(href)
-                            
-                            # 方法3: 查找meta name="cover"的content
-                            if not cover_items:
-                                for meta in opf_root.findall('.//{http://www.idpf.org/2007/opf}meta'):
-                                    if meta.get('name') == 'cover':
-                                        cover_id = meta.get('content')
-                                        if cover_id:
-                                            for item in opf_root.findall('.//{http://www.idpf.org/2007/opf}item'):
-                                                if item.get('id') == cover_id:
-                                                    cover_items.append(item.get('href'))
-                            
-                            print(f"[DEBUG] 找到封面文件候选: {cover_items}")
-                            
-                            # 检查是否存在非标准的封面路径
-                            opf_dir = os.path.dirname(opf_path)
-                            for cover_href in cover_items:
-                                # 构建完整的封面文件路径
-                                if opf_dir:
-                                    full_cover_path = f"{opf_dir}/{cover_href}"
-                                else:
-                                    full_cover_path = cover_href
-                                
-                                print(f"[DEBUG] 检查封面路径: {full_cover_path}")
-                                
-                                # 检查文件是否存在于EPUB中
-                                if full_cover_path in file_list:
-                                    print(f"[DEBUG] 封面文件存在: {full_cover_path}")
-                                    
-                                    # 如果封面文件不是标准的cover.jpg，创建一个临时的cover.jpg
-                                    if full_cover_path != 'cover.jpg' and 'cover.jpg' not in file_list:
-                                        print(f"[DEBUG] 需要创建临时的cover.jpg文件")
-                                        
-                                        # 创建临时目录
-                                        temp_dir = epub_path.parent / f"temp_epub_fix_{uuid.uuid4().hex[:8]}"
-                                        temp_dir.mkdir(exist_ok=True)
-                                        temp_files_to_cleanup.append(temp_dir)
-                                        
-                                        # 解压EPUB到临时目录
-                                        zip_ref.extractall(temp_dir)
-                                        
-                                        # 复制封面文件为cover.jpg
-                                        original_cover_path = temp_dir / full_cover_path
-                                        new_cover_path = temp_dir / 'cover.jpg'
-                                        
-                                        if original_cover_path.exists():
-                                            shutil.copy2(original_cover_path, new_cover_path)
-                                            print(f"[DEBUG] 已创建临时cover.jpg: {new_cover_path}")
-                                            
-                                            # 重新打包EPUB
-                                            temp_epub_path = epub_path.parent / f"temp_{epub_path.name}"
-                                            with zipfile.ZipFile(temp_epub_path, 'w', zipfile.ZIP_DEFLATED) as new_zip:
-                                                for root, dirs, files in os.walk(temp_dir):
-                                                    for file in files:
-                                                        file_path = os.path.join(root, file)
-                                                        arc_name = os.path.relpath(file_path, temp_dir)
-                                                        new_zip.write(file_path, arc_name)
-                                            
-                                            # 替换原文件
-                                            shutil.move(temp_epub_path, epub_path)
-                                            print(f"[DEBUG] 已更新EPUB文件，添加了cover.jpg")
-                                            needs_cleanup = True
-                                            return needs_cleanup, temp_files_to_cleanup
-                                        else:
-                                            print(f"[DEBUG] 原始封面文件不存在: {original_cover_path}")
-                                else:
-                                    print(f"[DEBUG] 封面文件不存在: {full_cover_path}")
-                        
-                        except ET.ParseError as e:
-                            print(f"[DEBUG] 解析OPF文件失败: {e}")
-                    else:
-                        print(f"[DEBUG] OPF文件不存在: {opf_path}")
-                else:
-                    print(f"[DEBUG] 未找到rootfile元素")
-            
-            except ET.ParseError as e:
-                print(f"[DEBUG] 解析container.xml失败: {e}")
-    
-    except Exception as e:
-        print(f"[DEBUG] 预处理EPUB封面时出错: {e}")
-    
-    print(f"[DEBUG] 预处理完成，需要清理: {needs_cleanup}")
-    return needs_cleanup, temp_files_to_cleanup
-
-
-def cleanup_temp_files(temp_files_list):
-    """
-    清理临时文件和目录
-    """
-    for temp_path in temp_files_list:
-        try:
-            if isinstance(temp_path, Path) and temp_path.exists():
-                if temp_path.is_dir():
-                    shutil.rmtree(temp_path)
-                    print(f"[DEBUG] 已清理临时目录: {temp_path}")
-                else:
-                    temp_path.unlink()
-                    print(f"[DEBUG] 已清理临时文件: {temp_path}")
-        except Exception as e:
-            print(f"[DEBUG] 清理临时文件失败 {temp_path}: {e}")
-
-
+# =========================
+# EPUB 處理
+# =========================
 def process_epub_file(file_path, processed_dir, report_dir):
-    """处理EPUB文件，采用两阶段处理：1.标点修复 2.CSS链接修复"""
+    """处理EPUB文件，确保标点修改真正写入"""
     print(f"\n[*] 处理EPUB文件: {file_path.name}")
     
     changes_log = []
     book_is_modified = False
     global_position = 0
-    temp_files_to_cleanup = []
     
     try:
-        # 预处理阶段：解决EPUB封面兼容性问题
-        print(f"[*] 预处理阶段：检查EPUB封面兼容性...")
-        needs_cleanup, temp_files = preprocess_epub_cover(file_path)
-        temp_files_to_cleanup.extend(temp_files)
-        
-        # 第一阶段：使用BeautifulSoup进行标点修复
+        # 第一阶段：引號與标点符号修复
         print(f"[*] 第一阶段：标点符号修复...")
-        try:
-            book = epub.read_epub(str(file_path))
-        except Exception as e:
-            if "cover" in str(e).lower() or "item named" in str(e).lower():
-                print(f"[!] EPUB文件封面相关错误，即使预处理后仍然失败: {e}")
-                cleanup_temp_files(temp_files_to_cleanup)
-                return False
-            else:
-                cleanup_temp_files(temp_files_to_cleanup)
-                raise e
+        book = epub.read_epub(str(file_path))
         
         for item in book.get_items():
             if item.get_type() == ITEM_DOCUMENT:
                 content = item.get_content().decode('utf-8')
-                soup = BeautifulSoup(content, 'xml')
+                # 使用 html.parser 而不是 xml
+                soup = BeautifulSoup(content, 'html.parser')
                 item_is_modified = False
                 
                 for p_tag in soup.find_all('p'):
-                    if not p_tag.get_text().strip():
-                        continue
-
-                    original_p_html = str(p_tag)
                     p_text_original = p_tag.get_text()
-                    
-                    # 对每个段落文本调用 is_main_content 检查
                     if not is_main_content(p_text_original):
                         continue
 
-                    p_text_modified, atomic_changes = fix_punctuation_and_get_changes(p_text_original)
+                    # 先修正引號
+                    p_text_fixed, quote_changes = fix_quotes_with_log(p_text_original)
 
+                    # 再補全標點
+                    p_text_modified, atomic_changes = fix_punctuation_and_get_changes(p_text_fixed)
+
+                    # 合併修改記錄
+                    atomic_changes = quote_changes + atomic_changes
+
+                    # 替換原本的生成 changes_log 部分
                     if atomic_changes:
                         book_is_modified = True
                         item_is_modified = True
-                        
-                        p_tag.string = p_text_modified
-                        modified_p_html = str(p_tag)
 
-                        original_report = html.escape(p_text_original)
-                        modified_report = html.escape(p_text_modified)
+                        # 將修改後文字寫回 p_tag
+                        p_tag.clear()
+                        p_tag.append(p_text_modified)
+
+                        # 建立報告內容
+                        original_report = html.escape(p_text_original, quote=False)
+                        modified_report = html.escape(p_text_modified, quote=False)
 
                         for change in atomic_changes:
-                            orig_esc = html.escape(change["original_text"])
-                            repl_esc = html.escape(change["replacement_text"])
-                            original_report = original_report.replace(orig_esc, f'<span class="highlight">{orig_esc}</span>')
-                            modified_report = modified_report.replace(repl_esc, f'<span class="highlight">{repl_esc}</span>')
-                        
+                            orig_esc = html.escape(change["original_text"], quote=False)
+                            repl_esc = html.escape(change["replacement_text"], quote=False)
+                            if orig_esc:
+                                original_report = original_report.replace(orig_esc, f'<span class="highlight">{orig_esc}</span>')
+                            if repl_esc:
+                                modified_report = modified_report.replace(repl_esc, f'<span class="highlight">{repl_esc}</span>')
+
                         changes_log.append({
                             'original': original_report.replace('\n', '<br>'),
                             'modified': modified_report.replace('\n', '<br>'),
                             'position': global_position
                         })
-                    
+
                     global_position += len(p_text_original)
 
-                # 如果文件被修改，更新item内容
                 if item_is_modified:
                     item.set_content(str(soup).encode('utf-8'))
 
         # 保存第一阶段修复后的EPUB文件
         temp_epub_path = processed_dir / f"temp_{file_path.name}"
         if book_is_modified:
-            # 检查并确保EPUB有必需的identifier元数据
+            # 确保有identifier
             if not book.get_metadata('DC', 'identifier'):
-                # 如果没有identifier，添加一个默认的
                 import uuid
                 default_identifier = f"urn:uuid:{uuid.uuid4()}"
                 book.add_metadata('DC', 'identifier', default_identifier)
-                print(f"  [DEBUG] 添加默认identifier: {default_identifier}")
             
-            try:
-                epub.write_epub(str(temp_epub_path), book, {})
-            except Exception as e:
-                if "cover" in str(e).lower() or "item named" in str(e).lower():
-                    print(f"[!] 保存EPUB时封面相关错误，跳过处理: {e}")
-                    cleanup_temp_files(temp_files_to_cleanup)
-                    return False
-                else:
-                    cleanup_temp_files(temp_files_to_cleanup)
-                    raise e
+            epub.write_epub(str(temp_epub_path), book, {})
             print(f"[*] 第一阶段完成，已保存临时文件: {temp_epub_path.name}")
         else:
-            # 如果没有修改，复制原文件作为临时文件
             shutil.copy2(file_path, temp_epub_path)
             print(f"[*] 第一阶段完成，无需修改标点")
-        
-        # 第二阶段：解包修复后的文件，修复CSS链接
+
+        # 第二阶段：CSS链接修复
         print(f"[*] 第二阶段：CSS链接修复...")
         css_fixed = fix_css_links_in_epub(temp_epub_path, file_path)
-        
         if css_fixed:
             print(f"[*] CSS链接修复完成")
             book_is_modified = True
         else:
             print(f"[*] CSS链接无需修复")
-        
-        # 将最终文件移动到目标位置
+
+        # 保存最终文件
         final_epub_path = processed_dir / file_path.name
         if temp_epub_path.exists():
             shutil.move(str(temp_epub_path), str(final_epub_path))
             print(f"[*] 最终文件已保存: {final_epub_path.name}")
-        
+
         # 生成报告
         if book_is_modified and changes_log:
             unique_changes = [dict(t) for t in {tuple(d.items()) for d in changes_log}]
             report_path = report_dir / f"{file_path.name}.html"
             generate_report(report_path, unique_changes, file_path.name)
-        
-        # 清理预处理产生的临时文件
-        cleanup_temp_files(temp_files_to_cleanup)
-        
+
         return book_is_modified
 
     except Exception as e:
         print(f"\n[!] 处理EPUB文件失败 {file_path.name}: {e}")
-        # 清理临时文件
         temp_epub_path = processed_dir / f"temp_{file_path.name}"
         if temp_epub_path.exists():
             temp_epub_path.unlink()
-        # 清理预处理产生的临时文件
-        cleanup_temp_files(temp_files_to_cleanup)
     return False
-
 
 def fix_css_links_in_epub(epub_path, original_epub_path):
     """修复EPUB文件中的CSS链接"""

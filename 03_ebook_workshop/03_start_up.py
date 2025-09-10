@@ -71,7 +71,15 @@ def menu_ebook_workshop():
         elif choice == '12':
             utils.run_script("epub_toolkit.py", cwd=module_path)
         elif choice == '13':
-            utils.run_script("punctuation_fixer_v2.py", cwd=module_path)
+            print("\n请选择标点补全模式：")
+            print(" 1. 只补充逗号（推荐，安全）")
+            print(" 2. 高级版：补充更多对话符号（有可能出错）")
+            mode = utils.get_input("请输入模式编号 (1/2)")
+            print("\n温馨提示：\n执行完成后，建议使用 4. 文件修复与工具 → 3. 修复 EPUB 缺失的 CSS 样式链接，修复可能出现的 css 样式丢失问题。\n")
+            if mode == '2':
+                utils.run_script("punctuation_fixer_v2.py", cwd=module_path)
+            else:
+                utils.run_script("punctuation_fixer.py", cwd=module_path)
         elif choice == '88':
             utils.show_usage(module_path)
         elif choice == '0':
