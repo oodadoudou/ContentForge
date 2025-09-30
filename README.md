@@ -1,118 +1,93 @@
-# ContentForge: 
+# ContentForge
 
------
+**[中文版本 / Chinese Version](README_CN.md)**
 
-## 核心功能
+A comprehensive digital content processing toolkit for comics, eBooks, and file management.
 
-  - **📚 内容获取**: 自动从特定网站 (如 Bom\*\*\*toon.tw) 下载已购买的漫画资源。
-  - **🎨 漫画处理**: 提供多种智能型流水线，将零散的漫画图片批量转换为适合阅读和存储的、经过优化的 PDF 文件。支持无边框合并、智能分割和高品质输出。
-  - **📖 电子书工坊**: 全功能的电子书处理中心，支持从 TXT/Markdown 创建 EPUB/HTML，以及对现有 EPUB 文件进行内容替换、样式美化、繁简转换、合并与分割。
-  - **🛠️ 文件修复**: 针对常见的文件问题（如 TXT 乱码、EPUB 封面不显示、竖排版式）提供一键修复功能。
-  - **🗂️ 文件库管理**: 自动整理杂乱的文件，通过 AI 翻译（需设定）对文件夹进行智能重命名，并新增拼音首字母以便排序归档。同时提供文件/文件夹加密打包功能。
-  - **🌐 通用下载器**: 提供针对特定网站的专用下载工具，目前支持 Diri\*\*\*tto 小说下载。
-  - **⚙️ 系统化管理**: 所有模块共享统一的设定文件，并可通过主菜单轻松管理预设路径与依赖软件包。
+## ✨ Features
 
------
+- **📚 Content Acquisition**: Download purchased comics from specific platforms
+- **🎨 Comic Processing**: Convert comic images to optimized PDFs with smart merging and splitting
+- **📖 eBook Workshop**: Create, convert, and edit EPUB/TXT files with styling and formatting
+- **🛠️ File Repair**: Fix common issues like encoding problems and cover display
+- **🗂️ Library Management**: Organize files with AI translation and encryption
+- **🌐 Universal Downloader**: Download content from supported websites
+- **⚙️ System Management**: Unified settings and dependency management
 
-## 快速上手
+## 🚀 Quick Start
 
-在第一次执行本项目前，请依照以下步骤完成设定：
+### 1. Install Dependencies
 
-### 1\. 安装依赖软件包
+**Automatic Installation (Recommended):**
+1. Open terminal and navigate to project directory
+2. Run: `python main.py`
+3. Select `6. System Settings & Dependencies`
+4. Choose `3. Install/Update Dependencies`
 
-本项目依赖于 `requirements.txt` 中列出的 Python 软件包。
+**Manual Installation:**
+```bash
+pip install -r requirements.txt
+```
 
-  - **自动安装 (推荐)**:
+### 2. Set Working Directory
 
-    1.  在您的终端中，导航到项目的根目录。
-    2.  执行主程序：`python main.py`
-    3.  在主菜单中，选择 `6. 系统设定与依赖`。
-    4.  接着选择 `3. 安装/更新项目依赖 (pip)`，程序将会自动安装所有必要的软件包。
+On first run, the program will guide you to set a default working directory for all operations.
 
-  - **手动安装**:
-    在您的终端中，导航到项目的根目录，然后执行以下指令：
+### 3. Configure AI Translation (Optional)
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+For library management features:
+1. Run `python main.py`
+2. Go to `6. System Settings & Dependencies`
+3. Select `2. Configure AI Translation API`
 
-### 2\. 设定预设工作目录
+## 📖 Usage
 
-首次执行 `python main.py` 时，程序会引导您设定一个**预设工作目录**。
+1. Open terminal
+2. Navigate to project directory: `cd /path/to/ContentForge`
+3. Run: `python main.py`
+4. Follow the menu to select desired functions
 
-  - **作用**: 这个目录将作为所有模块在需要读取或保存文件时的预设路径，避免您每次都要输入完整的路径。
-  - **建议**: 您可以将其设定为您常用的下载文件夹或工作区。
+## 🔧 Modules
 
-您之后随时可以在 `主菜单 -> 6. 系统设定与依赖 -> 1. 设定预设工作目录` 中修改此设定。
+### Content Acquisition
+- Download purchased comics from supported platforms
+- Automatic login credential management
 
-### 3\. (选择性) 设定 AI 翻译功能
+### Comic Processing
+- Convert image folders to optimized PDFs
+- Smart merging, splitting, and quality optimization
+- Seamless reading experience
 
-`文件库管理` 模块中的 "智能翻译与整理" 功能需要您设定 AI API 密钥。
+### eBook Workshop
+- **Create**: TXT/Markdown → EPUB/HTML with styling
+- **Convert**: EPUB ↔ TXT
+- **Edit**: Content replacement, styling, Traditional/Simplified Chinese conversion
+- **Manage**: Merge/split EPUB files
 
-1.  执行 `python main.py`。
-2.  在主菜单中，选择 `6. 系统设定与依赖`。
-3.  选择 `2. 配置 AI 翻译 API`，然后根据提示填入您的 API Key 和相关信息。
+### File Repair
+- Fix EPUB cover display issues
+- Resolve TXT encoding problems
+- Correct vertical layout formatting
 
------
+### Library Management
+- Organize scattered files automatically
+- AI-powered folder translation and renaming
+- File/folder encryption and packaging
 
-## 如何使用
+### Universal Downloader
+- Download novels from supported websites
+- Automatic chapter collection and packaging
 
-1.  开启您的终端 (Terminal / CMD / PowerShell)。
-2.  使用 `cd` 指令进入本项目的根目录。
-3.  执行主程序：
-    ```bash
-    python main.py
-    ```
-4.  根据屏幕上显示的菜单，输入对应的数字来选择并执行您需要的功能。
+## 📋 Requirements
 
------
+- Python 3.7+
+- Dependencies listed in `requirements.txt`
+- Chrome browser (for some download features)
 
-## 模块详解
+## 🤝 Contributing
 
-### 模块一: 内容获取 (01\_acquisition)
+Contributions are welcome! Please feel free to submit issues and pull requests.
 
-  - **功能**: 专用于从 Bom\*\*\*toon.tw 平台下载您已购买的漫画。
-  - **核心脚本**: `bomtoontwext.py`。
-  - **特点**: 包含自动更新登录凭证的工具 (`update_token.py`)，简化了登录流程。
+## 📄 License
 
-### 模块二: 漫画处理流程 (02\_comic\_processing)
-
-  - **功能**: 将包含序列图片的文件夹（如漫画章节）批量转换为优化的 PDF 文件。
-  - **核心流程 (v4)**:
-    1.  **标准化合并**: 将所有图片缩放到统一宽度并合并为一张长图，从根源避免白边问题。
-    2.  **向量化分割**: 通过高效的 NumPy 算法分析图片，精准识别内容与空白，实现快速且准确的分割。
-    3.  **智能重打包**: 将分割后的图片按大小和高度限制重新打包，兼顾文件大小与阅读体验。
-    4.  **生成PDF**: 将处理好的图片块生成最终的 PDF 文件。
-
-### 模块三: 电子书工坊 (03\_ebook\_workshop)
-
-  - **功能**: 一个全能的电子书处理中心，用于创建、转换、编辑和美化电子书。
-  - **主要工具**:
-      - **创建**: 从 TXT 或 Markdown 文件创建带有完整目录和样式的 EPUB/HTML。
-      - **转换**: 将 EPUB 转为纯文本 TXT。
-      - **编辑**:
-          - **内容替换**: 根据自定义规则（支持正则表达式）批量替换 EPUB/TXT 内容。
-          - **样式美化**: 一键为 EPUB 替换为统一的、更美观的 CSS 样式。
-          - **繁简转换**: 自动将 EPUB/TXT 内容从繁体中文转为简体。
-          - **合并/分割**: 将多个 EPUB 文件合并为一个，或将一个大文件按章节分割。
-
-### 模块四: 文件修复与格式化 (04\_file\_repair)
-
-  - **功能**: 专门修复格式不规范或有常见问题的 EPUB 和 TXT 文件。
-  - **主要工具**:
-      - **EPUB 综合修复**: 自动检测并修复竖排版式及繁体内容问题。
-      - **EPUB 封面修复**: 解决在某些阅读器上封面无法正常显示的问题。
-      - **TXT 编码修复**: 解决因编码错误导致的 TXT 文件乱码问题。
-
-### 模块五: 文件库管理 (05\_library\_organization)
-
-  - **功能**: 提供自动化工具，对本地文件和文件夹进行整理、翻译和归档。
-  - **主要工具**:
-      - **智能整理与翻译**: 自动将散乱文件按名称分组到文件夹，调用 AI API 翻译文件夹名称（如日/韩文译为中文），并增加拼音首字母前缀以便排序。
-      - **文件/文件夹加密**: 将文件或整个文件夹打包成一个加密的 `.z删ip` 文件，保护内容不被直接预览。
-
-### 模块七: 通用下载器 (07\_downloader)
-
-  - **功能**: 提供针对特定网站的专用下载工具。
-  - **主要工具**:
-      - **Diri***tto 小说下载器*\*: 自动抓取指定 Diri\*\*\*tto 小说的所有章节，保存为 TXT 并打包成 ZIP。需要以“远程调试”模式启动 Chrome 浏览器。
+This project is for educational and personal use only.
