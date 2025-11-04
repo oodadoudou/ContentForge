@@ -80,7 +80,7 @@ For library management features:
 
 ## 📋 Requirements
 
-- Python 3.7+
+- Python 3.12+
 - Dependencies listed in `requirements.txt`
 - Chrome browser (for some download features)
 
