@@ -1,6 +1,6 @@
 # ContentForge
 
-**[English Version / 英文版本](README.md)**
+**[English Version / 英文版本](https://github.com/oodadoudou/ContentForge-EN) | [中文版本 / Chinese Version](https://github.com/oodadoudou/ContentForge)**
 
 一个全面的数字内容处理工具包，专为漫画、电子书和文件管理而设计。
 
@@ -80,9 +80,11 @@ pip install -r requirements.txt
 
 ## 📋 系统要求
 
+## 📋 Requirements
+
 - Python 3.12+
-- `requirements.txt` 中列出的依赖包
-- Chrome浏览器（某些下载功能需要）
+- Dependencies listed in `requirements.txt`
+- Chrome browser (for some download features)
 
 ## 🤝 贡献
 
