@@ -5,6 +5,7 @@ import requests
 import time
 import shutil
 import re
+import unicodedata
 from pypinyin import pinyin, Style
 
 # --- 全局配置 (將由設定檔覆蓋) ---
@@ -71,7 +72,7 @@ def load_settings_from_json():
         
         # 加载 AI 配置
         ai_config = settings.get("ai_config", {})
-        API_URL = ai_config.get("base_url", "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+        API_URL = ai_config.get("base_url", "https://ark.cn-beijing.volces.com/api/v3/chat/completions").strip()
         API_BEARER_TOKEN = ai_config.get("api_key", "")
         API_MODEL = ai_config.get("model_name", "doubao-pro-32k")
         
@@ -196,7 +197,10 @@ def translate_names_via_api(root_directory: str, original_names: list) -> list:
     total_names = len(original_names)
     print_progress_bar(0, total_names, prefix='    翻译进度:', suffix='完成', length=40)
     for i, original_name in enumerate(original_names):
-        name_to_translate = original_name.replace('+', ' ').replace('_', ' ').strip()
+        # Normalize to NFC to ensure consistent handling of Korean chars
+        name_normalized = unicodedata.normalize('NFC', original_name)
+        name_to_translate = name_normalized.replace('+', ' ').replace('_', ' ').strip()
+        
         if original_name != name_to_translate:
             print(f"\n    预处理: '{original_name}' -> '{name_to_translate}'")
             
