@@ -1,19 +1,62 @@
 import os
-import shutil
-from PIL import Image, ImageFile
-import natsort
 import sys
+
+IMPORT_DEBUG_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "child_import_debug.log")
+
+
+def _log_import_debug(message):
+    try:
+        with open(IMPORT_DEBUG_LOG, "a", encoding="utf-8") as f:
+            f.write(f"{message}\n")
+    except Exception:
+        pass
+
+
+_log_import_debug("[IMPORT DEBUG] import os done")
+
+import shutil
+_log_import_debug("[IMPORT DEBUG] import shutil done")
+
+import re
+_log_import_debug("[IMPORT DEBUG] import re done")
+
+from PIL import Image, ImageFile
+_log_import_debug("[IMPORT DEBUG] from PIL import Image, ImageFile done")
+
 from collections import Counter
+_log_import_debug("[IMPORT DEBUG] from collections import Counter done")
+
 import math
+_log_import_debug("[IMPORT DEBUG] import math done")
+
 import traceback
+_log_import_debug("[IMPORT DEBUG] import traceback done")
+
 import json
+_log_import_debug("[IMPORT DEBUG] import json done")
+
 import time
+_log_import_debug("[IMPORT DEBUG] import time done")
+
+import argparse # 导入 argparse 模块
+_log_import_debug("[IMPORT DEBUG] import argparse done")
 
 try:
     import numpy as np
+    _log_import_debug("[IMPORT DEBUG] import numpy as np done")
 except ImportError:
     print("错误：此脚本需要 numpy 库。请使用 'pip install numpy' 命令进行安装。")
     sys.exit(1)
+
+
+def natural_sort_key(value):
+    """本地自然排序，避免 natsort 在某些 Windows 环境导入时触发 WMI 卡死。"""
+    text = str(value)
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', text)]
+
+
+def natsorted(values):
+    return sorted(values, key=natural_sort_key)
 
 # --- 全局配置 ---
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -186,7 +229,7 @@ def merge_to_long_image(source_project_dir, output_long_image_dir, long_image_fi
         return None
 
     # 对收集到的所有完整路径进行自然排序
-    sorted_image_filepaths = natsort.natsorted(image_filepaths)
+    sorted_image_filepaths = natsorted(image_filepaths)
 
     images_data = []
     total_calculated_height = 0
@@ -382,7 +425,7 @@ def split_long_image_v2(long_image_path, output_split_dir, min_solid_band_height
         traceback.print_exc()
         return []
 
-    return natsort.natsorted(split_image_paths)
+    return natsorted(split_image_paths)
 
 
 # --- V4 分割相关函数 ---
@@ -502,7 +545,7 @@ def split_long_image_v4(long_image_path, output_split_dir, quantization_factor, 
                 print(f"    建议检查参数: MAX_UNIQUE_COLORS_IN_BG={max_unique_colors}, MIN_SOLID_COLOR_BAND_HEIGHT={min_band_height}")
                 return []
 
-            return natsort.natsorted(split_image_paths)
+            return natsorted(split_image_paths)
 
     except Exception as e:
         print(f"    V4 分割图片 '{os.path.basename(long_image_path)}' 时发生严重错误: {e}")
@@ -775,7 +818,7 @@ def repack_split_images(split_image_paths, output_dir, base_filename, max_size_m
         if os.path.exists(path): 
             os.remove(path)
             
-    return natsort.natsorted(repacked_paths)
+    return natsorted(repacked_paths)
 
 
 def create_pdf_from_images(image_paths_list, output_pdf_dir, pdf_filename_only):
@@ -827,7 +870,23 @@ def cleanup_intermediate_dirs(long_img_dir, split_img_dir):
                 print(f"    删除文件夹 '{dir_path}' 失败: {e}")
 
 
-if __name__ == "__main__":
+def main(argv=None):
+    print(f"[DEBUG child] main() entered; argv={argv!r}")
+    # --- 修改：将路径参数设为必须 ---
+    parser = argparse.ArgumentParser(
+        description="自动化图片批量处理流程 (V5 - 智能融合版)",
+        formatter_class=argparse.RawTextHelpFormatter # 保持描述格式
+    )
+    parser.add_argument(
+        '-p', '--path',
+        required=True, # 将此参数设置为必须
+        help='(必须) 指定包含一个或多个项目子文件夹的【根目录】路径。'
+    )
+    print("[DEBUG child] parser constructed; about to parse args")
+    args = parser.parse_args(argv)
+    print(f"[DEBUG child] args parsed; args.path={args.path!r}")
+    # --- 修改结束 ---
+
     print("🚀 自动化图片批量处理流程 (V5 - 智能融合版)")
     print("💡 特色：V2传统分割 + V4极速分割 双重保障，PDF创建失败时自动切换方法！")
     print("🎨 优化：使用预设韩漫常见背景色，提高分割速度和效率！")
@@ -836,61 +895,47 @@ if __name__ == "__main__":
     print("⚠️  注意：V2分割失败的判定标准为PDF创建失败，而非单纯的分割失败")
     print("-" * 80)
     
-    def load_default_path_from_settings():
-        """从共享设置文件中读取默认工作目录。"""
-        try:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            settings_path = os.path.join(script_dir, '..', 'shared_assets', 'settings.json')
-            if not os.path.exists(settings_path):
-                settings_path = os.path.join(os.path.dirname(script_dir), 'shared_assets', 'settings.json')
-            with open(settings_path, 'r', encoding='utf-8') as f: 
-                return json.load(f).get("default_work_dir")
-        except:
-            return os.path.join(os.path.expanduser("~"), "Downloads")
+    # --- 修改：简化路径处理逻辑 ---
+    # argparse 在 required=True 时会自动处理未输入的情况，因此无需手动检查
+    root_input_dir = args.path
     
-    default_root_dir_name = load_default_path_from_settings() or "."
+    # 验证路径是否存在且为目录
+    abs_path_to_check = os.path.abspath(root_input_dir)
+    print(f"[DEBUG child] validating root_input_dir; abs_path_to_check={abs_path_to_check!r}")
+    if not os.path.isdir(abs_path_to_check):
+        print(f"错误: 路径 '{abs_path_to_check}' 不是一个有效的目录或不存在。")
+        return 1
 
-    root_input_dir = ""
-    while True:
-        prompt_message = (
-            f"请输入包含一个或多个项目子文件夹的【根目录】路径。\n"
-            f"脚本将递归处理每个项目子文件夹中的所有图片。\n"
-            f"(直接按 Enter 键将使用默认路径: '{default_root_dir_name}'): "
-        )
-        user_provided_path = input(prompt_message).strip()
-        current_path_to_check = user_provided_path if user_provided_path else default_root_dir_name
-        if not user_provided_path:
-            print(f"使用默认路径: {current_path_to_check}")
+    root_input_dir = abs_path_to_check
+    print(f"已选定根处理目录: {root_input_dir}")
+    # --- 修改结束 ---
 
-        abs_path_to_check = os.path.abspath(current_path_to_check)
-        if os.path.isdir(abs_path_to_check):
-            root_input_dir = abs_path_to_check
-            print(f"已选定根处理目录: {root_input_dir}")
-            break
-        else:
-            print(f"错误: 路径 '{abs_path_to_check}' 不是一个有效的目录或不存在。")
 
     # 根据根目录名称创建唯一的PDF输出文件夹
     root_dir_basename = os.path.basename(os.path.abspath(root_input_dir))
     overall_pdf_output_dir = os.path.join(root_input_dir, f"{root_dir_basename}_pdfs")
+    print(f"[DEBUG child] overall_pdf_output_dir={overall_pdf_output_dir!r}")
     os.makedirs(overall_pdf_output_dir, exist_ok=True)
     
     # 创建用于存放成功处理项目的文件夹
     success_move_target_dir = os.path.join(root_input_dir, SUCCESS_MOVE_SUBDIR_NAME)
+    print(f"[DEBUG child] success_move_target_dir={success_move_target_dir!r}")
     os.makedirs(success_move_target_dir, exist_ok=True)
 
     # 扫描要处理的项目子文件夹，排除脚本的管理文件夹
+    print(f"[DEBUG child] scanning subdirectories under {root_input_dir!r}")
     subdirectories = [d for d in os.listdir(root_input_dir)
                       if os.path.isdir(os.path.join(root_input_dir, d)) and \
                          d != SUCCESS_MOVE_SUBDIR_NAME and \
                          d != os.path.basename(overall_pdf_output_dir) and \
                          not d.startswith('.')]
+    print(f"[DEBUG child] scan completed; found {len(subdirectories)} candidate subdirectories")
 
     if not subdirectories:
         print(f"\n在根目录 '{root_input_dir}' 中未找到可处理的项目子文件夹。")
-        sys.exit()
+        return 0
 
-    sorted_subdirectories = natsort.natsorted(subdirectories)
+    sorted_subdirectories = natsorted(subdirectories)
     print(f"\n将按顺序处理以下 {len(sorted_subdirectories)} 个项目文件夹: {', '.join(sorted_subdirectories)}")
     failed_subdirs_list = []
 
@@ -965,3 +1010,8 @@ if __name__ == "__main__":
     print(f"所有成功生成的PDF文件（如有）已保存在: {overall_pdf_output_dir}")
     print(f"所有成功处理的原始项目文件夹（如有）已移至: {success_move_target_dir}")
     print("🎉 V5 智能融合版脚本执行完毕！")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

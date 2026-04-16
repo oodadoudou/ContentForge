@@ -1,7 +1,6 @@
 import os
 import re
 import pikepdf
-import natsort
 import logging
 import json  # 新增: 用于解析JSON
 
@@ -15,10 +14,12 @@ MERGED_PDF_SUBDIR_NAME = "merged_pdf"
 # 删除了旧的硬编码 DEFAULT_INPUT_DIR
 
 def natural_sort_key(s: str) -> list:
-    """
-    为文件名生成自然排序的键。
-    """
-    return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
+    """本地自然排序，避免 natsort 在某些 Windows 环境导入时触发 WMI 卡死。"""
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
+
+
+def natsorted(values):
+    return sorted(values, key=natural_sort_key)
 
 
 def merge_pdfs_in_directory(root_dir: str):
@@ -38,7 +39,7 @@ def merge_pdfs_in_directory(root_dir: str):
 
     print(f"\n--- 发现 {len(subfolders)} 个子文件夹,准备开始合并 ---")
 
-    for subfolder_path in natsort.natsorted(subfolders):
+    for subfolder_path in natsorted(subfolders):
         subfolder_name = os.path.basename(subfolder_path)
         logging.info(f"===== 开始处理子文件夹: {subfolder_name} =====")
 
@@ -51,7 +52,7 @@ def merge_pdfs_in_directory(root_dir: str):
                     pdf_files_to_merge.append(pdf_path)
                     logging.info(f"  [找到文件] {os.path.relpath(pdf_path, subfolder_path)}")
 
-        pdf_files_to_merge = natsort.natsorted(pdf_files_to_merge)
+        pdf_files_to_merge = natsorted(pdf_files_to_merge)
 
         if not pdf_files_to_merge:
             logging.warning(f"在 '{subfolder_name}' 中没有找到任何PDF文件, 跳过。")
