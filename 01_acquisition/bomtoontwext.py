@@ -730,21 +730,50 @@ class Extractor(ExtractorBase):
         response = self.get_request(f'https://www.bomtoon.tw/viewer/{comic_id}/{chapter_id}', headers)
         soup = BeautifulSoup(response.text, 'html.parser')
         data = soup.select_one('#__NEXT_DATA__')
+        if not data:
+            raise Exception('無法在頁面中找到 __NEXT_DATA__，可能是登入失效或網頁結構已變更')
         j = json.loads(data.text)
 
-        comic_title = j['props']['pageProps']['openGraphData']['contentsTitle']
-        chapter_title = j['props']['pageProps']['openGraphData']['title']
-        if not 'result' in j['props']['pageProps']['episodeData']:
-            raise Exception(j['props']['pageProps']['episodeData']['error'])
+        page_props = j.get('props', {}).get('pageProps', {})
+        episode_data = page_props.get('episodeData', {})
+        if 'result' not in episode_data:
+            raise Exception(episode_data.get('error', '無法取得章節資料，可能是未購買、登入失效或網頁結構已變更'))
+
+        result = episode_data['result']
+        purchase_data = page_props.get('purchaseData', {})
+        open_graph_data = page_props.get('openGraphData', {})
+        comic_title = (
+            open_graph_data.get('contentsTitle')
+            or purchase_data.get('contentsTitle')
+            or result.get('contentsTitle')
+            or comic_id
+        )
+        chapter_title = (
+            open_graph_data.get('title')
+            or purchase_data.get('episodeTitle')
+            or result.get('title')
+            or result.get('subTitle')
+            or chapter_id
+        )
+        images = result.get('images') or []
+        if not images:
+            raise Exception('章節資料中沒有圖片列表，可能是未購買、登入失效或網頁結構已變更')
+
         image_download = ImageDownload(root, comic_title, f'{chapter_id.zfill(3)} {chapter_title}')
-        if j['props']['pageProps']['episodeData']['result']['isScramble']:
+        if result.get('isScramble'):
             # Image is scrambled
-            line = j['props']['pageProps']['episodeData']['result']['images'][1]['line']
-            point = j['props']['pageProps']['episodeData']['result']['images'][1]['point']
+            scramble_image = next((image for image in images if image.get('line') and image.get('point')), None)
+            if not scramble_image:
+                raise Exception('章節標記為加密圖片，但找不到解密參數')
+            line = scramble_image['line']
+            point = scramble_image['point']
             scramble_index = self.decrypt_scramble_index(comic_id, chapter_id, line, point)
             image_download.decrypt_info = scramble_index
-        for i in j['props']['pageProps']['episodeData']['result']['images']:
-            image_download.requests.append(httpx.Request('GET', i['imagePath']))
+        for i in images:
+            image_path = i.get('imagePath')
+            if not image_path:
+                raise Exception('圖片資料缺少 imagePath，可能是網頁結構已變更')
+            image_download.requests.append(httpx.Request('GET', image_path))
         self.download_list(image_download)
 
     # === START OF PAGINATION FIX ===
