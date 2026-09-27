@@ -26,8 +26,9 @@ def menu_acquisition():
         print(" 5. 下载指定漫画的特定章节")
         print(" 6. 下载指定漫画的全部章节")
         print(" 7. 按序号范围下载章节 (如: 1-5, 8, 10)")
+        print(" 8. ⭐一键下载【所有已购】漫画 (逐本下载全部章节)")
         print("----------")
-        print(" 8. 查看本模块用法说明 (README)")
+        print(" 9. 查看本模块用法说明 (README)")
         print(" 0. 返回主菜单")
         choice = utils.get_input("请选择")
 
@@ -87,6 +88,11 @@ def menu_acquisition():
                     utils.run_script(f'{base_command} dl-seq -o "{output_dir}" "{comic_id}" "{seq}"', cwd=module_path)
         
         elif choice == '8':
+            print("提示: 此功能会自动扫描您账号下所有已购漫画，")
+            print("      并逐本下载全部章节 (从第一章到最后一章)。")
+            print("      下载目录结构与其他选项一致，已下载的文件会自动跳过。")
+            utils.run_script("download_all.py", cwd=module_path)
+        elif choice == '9':
             utils.show_usage(module_path)
         elif choice == '0':
             break

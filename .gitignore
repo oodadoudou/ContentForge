@@ -47,6 +47,11 @@ shared_assets/settings.json
 
 # Bomtoon 登录凭证文件
 01_acquisition/bomtoontw-session
+01_acquisition/bomtoontw-config.txt
+01_acquisition/*-session
+
+# 一键下载脚本的本地状态文件 (记录上次下载目录)
+01_acquisition/.download_all_state.json
 
 # 翻译脚本生成的临时运行文件
 _temp_runner.py
