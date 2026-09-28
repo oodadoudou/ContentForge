@@ -10,7 +10,8 @@
 
 【核心脚本】
 
-🌟 image_processes_pipeline_v5.py (⭐⭐⭐ 特别推荐！智能融合版，双重保障)
+🌟 image_processes_pipeline_v6.py (⚡ 实验版, 并行加速, 输出与V5一致)
+image_processes_pipeline_v5.py (⭐⭐⭐ 特别推荐！智能融合版，双重保障)
 image_processes_pipeline_v2.py (⭐ 推荐快速流程,适配绝大多数情况)
 image_processes_pipeline_v3.py (智能流程)
 image_processes_pipeline_v4.py (实验流程)
@@ -26,6 +27,30 @@ convert_long_pdf.py (PDF转图片工具)
 在主菜单选择 "2. 漫画处理与生成"，然后根据菜单提示进行操作。
 
 --------------------- 功能与用法详解 ---------------------
+
+🌟 [V6 实验流程] 并行加速版 (基于V5, 输出与V5一致) +++++
+
+这是 V5 的并行加速实验版本。分割、合并、重打包与 PDF 生成的判定逻辑
+与 V5 完全一致（同样的切割点、同样的页面内容），仅通过以下方式提速：
+
+【加速手段】
+  1. 多个章节文件夹并行处理（多进程，互不干扰）
+  2. V2 纯色带扫描 / V4 候选行筛选 NumPy 向量化（判定标准不变）
+  3. 长图合并阶段的图片解码线程池预取
+  4. 中间 PNG 快速压缩（仅中间产物，不影响最终 PDF）
+
+【性能要求 (实验版)】
+  - CPU: 建议 4 核及以上。并行进程数会按 CPU 核心数自动限制
+    （上限 8 进程），无需手动调参。
+  - 内存: 建议 8GB 及以上。每个并行进程峰值约 1~2GB；
+    安装 psutil (pip install psutil) 后，会按当前可用内存自动
+    减少进程数，防止内存不足；未安装 psutil 时仅按 CPU 检测。
+  - 手动控制（可选）:
+      python image_processes_pipeline_v6.py -p <目录> --workers 4   # 指定4进程
+      python image_processes_pipeline_v6.py -p <目录> --serial      # 单进程模式(行为同V5)
+
+【实测参考】(12核CPU, 4进程, 4个章节)
+  V5 约 128 秒 → V6 并行约 16 秒 (约 8 倍)，输出 PDF 完全一致。
 
 🌟 [V5 智能融合流程] 双重保障分割 + 自动切换 + + + (特别推荐！)
 

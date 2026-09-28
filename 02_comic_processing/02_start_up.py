@@ -15,32 +15,36 @@ def menu_comic_processing():
     
     while True:
         utils.print_header("2. 漫画处理与生成 (图片转PDF)")
-        print(" 1. [V5 智能融合] 双重保障分割算法 (★强烈推荐★)")
-        print(" 2. [V2 快速流程] 合并、分割、重打包并生成 PDF")
-        print(" 3. [V4 实验流程] 使用最新算法处理 (若V2分割失败可尝试)")
-        print(" 4. [快速转换] 将图片文件夹直接转为 PDF (无优化)")
-        print(" 5. [PDF 合并] 将各子文件夹内的所有PDF合并为单个文件")
-        print(" 6. [PDF 转图片] 将PDF转为图片 (支持超长图分割)")
+        print(" 1. [V6 实验流程] 并行加速版 (自动检测CPU/内存, 分割逻辑同V5)")
+        print(" 2. [V5 智能融合] 双重保障分割算法 (★强烈推荐★)")
+        print(" 3. [V2 快速流程] 合并、分割、重打包并生成 PDF")
+        print(" 4. [V4 实验流程] 使用最新算法处理 (若V2分割失败可尝试)")
+        print(" 5. [快速转换] 将图片文件夹直接转为 PDF (无优化)")
+        print(" 6. [PDF 合并] 将各子文件夹内的所有PDF合并为单个文件")
+        print(" 7. [PDF 转图片] 将PDF转为图片 (支持超长图分割)")
         print("----------")
         print(" 8. 查看本模块用法说明 (README)")
         print(" 0. 返回主菜单")
         choice = utils.get_input("请选择")
 
         if choice == '1':
+            # 运行V6并行加速实验版（分割/合并逻辑与V5一致，自动检测CPU/内存动态提速）
+            utils.run_script("image_processes_pipeline_v6.py", cwd=module_path)
+        elif choice == '2':
             # 运行V5智能融合版本，双重保障分割算法
             utils.run_script("image_processes_pipeline_v5.py", cwd=module_path)
-        elif choice == '2':
+        elif choice == '3':
             # 运行稳定的V2版本
             utils.run_script("image_processes_pipeline_v2.py", cwd=module_path)
-        elif choice == '3':
+        elif choice == '4':
             # 运行最新的V4版本，作为备用选项
             utils.run_script("image_processes_pipeline_v4.py", cwd=module_path)
-        elif choice == '4':
-            utils.run_script("convert_img_to_pdf.py", cwd=module_path)
         elif choice == '5':
+            utils.run_script("convert_img_to_pdf.py", cwd=module_path)
+        elif choice == '6':
             # 运行PDF合并脚本
             utils.run_script("merge_pdfs.py", cwd=module_path)
-        elif choice == '6':
+        elif choice == '7':
             # 运行PDF转图片（支持长图分割）的脚本
             utils.run_script("convert_long_pdf.py", cwd=module_path)
         elif choice == '8':
